@@ -1,0 +1,3528 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stok Yönetimi - Firebase</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="pdf-font.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 12px;
+            color: #333;
+            font-size: 14px;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 14px 18px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        h1 { font-size: 20px; color: #2c3e50; margin: 0 0 2px 0; border-bottom: 2px solid #ecf0f1; padding-bottom: 6px; }
+        h2 { font-size: 15px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; margin: 0 0 10px 0; }
+        h3 { font-size: 13px; margin: 0 0 4px 0; color: #2c3e50; }
+        .subtitle { color: #7f8c8d; font-size: 13px; margin: 0 0 10px 0; }
+        .section {
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        .flex-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .flex-row > div { flex: 1; min-width: 280px; }
+
+        .connection-status {
+            padding: 8px 14px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .connection-status.connected { background: #d4edda; border: 1px solid #28a745; color: #155724; }
+        .connection-status.disconnected { background: #f8d7da; border: 1px solid #dc3545; color: #721c24; }
+        .connection-status.loading { background: #fff3cd; border: 1px solid #ffc107; color: #856404; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .status-dot.green { background: #28a745; }
+        .status-dot.red { background: #dc3545; }
+        .status-dot.yellow { background: #ffc107; }
+
+
+        .file-upload-area {
+            border: 2px dashed #ced4da;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+        .file-upload-area:hover { background: #e8f0fe; border-color: #4285f4; }
+        .file-upload-area.dragover { background: #d4e4f7; border-color: #1a73e8; }
+        .file-upload-area .icon { font-size: 28px; display: block; }
+        .file-upload-area .text { font-size: 13px; color: #6c757d; }
+        .file-upload-area .file-name { font-size: 13px; color: #28a745; font-weight: 600; }
+        .file-upload-area input[type="file"] { display: none; }
+
+
+        .btn { padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-success:hover { background-color: #218838; }
+        .btn-info { background-color: #17a2b8; color: white; }
+        .btn-info:hover { background-color: #138496; }
+        .btn-warning { background-color: #ffc107; color: #333; }
+        .btn-warning:hover { background-color: #e0a800; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-primary:hover { background-color: #0069d9; }
+        .btn-sm { padding: 2px 6px; font-size: 10px; }
+        .btn-group { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+        .filter-buttons { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+        .filter-buttons .btn { font-size: 11px; padding: 2px 8px; }
+        .btn-active { box-shadow: 0 0 0 2px #2c3e50; }
+
+        .form-group { margin-bottom: 8px; }
+        .form-group label { display: block; margin-bottom: 2px; font-weight: 600; font-size: 12px; }
+        .form-group select, .form-group input { width: 100%; padding: 5px 8px; border: 1px solid #ced4da; border-radius: 4px; font-size: 13px; box-sizing: border-box; min-height: 32px; }
+        .form-row { display: flex; gap: 8px; align-items: flex-end; }
+        .form-row .form-group { flex: 1; margin-bottom: 0; }
+        .dual-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .dual-form .form-group { flex: 1; min-width: 160px; margin-bottom: 0; }
+        .dual-form .form-group:last-child { flex: 0 0 auto; min-width: auto; }
+
+        .table-wrapper { max-height: 450px; overflow: auto; border: 1px solid #e9ecef; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; table-layout: fixed; }
+        th { background-color: #34495e; color: white; padding: 5px 6px; text-align: left; position: sticky; top: 0; z-index: 10; font-size: 11px; white-space: nowrap; }
+        td { padding: 4px 6px; border-bottom: 1px solid #eee; vertical-align: middle; word-wrap: break-word; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        tr:hover { background-color: #f1f9ff; }
+
+        /* Sütun genişlikleri (sınıf tabanlı; tablo yatay kaydırılır) */
+        #stokTable { min-width: 1620px; }
+        #stokTable .c-no { width: 40px; text-align: center; }
+        #stokTable .c-id { width: 78px; }
+        #stokTable .c-ad { width: 250px; }
+        #stokTable .c-mkys { width: 130px; }
+        #stokTable .c-kalan, #stokTable .c-eksik, #stokTable .c-fazla { width: 68px; text-align: right; }
+        #stokTable .c-rafSkt, #stokTable .c-skt { width: 88px; }
+        #stokTable .c-sktGecenMiktar { width: 88px; text-align: right; }
+        #stokTable .c-sktGecenTarih { width: 100px; }
+        #stokTable .c-aciklama { width: 180px; }
+        #stokTable .c-durum { width: 96px; }
+        #stokTable .c-islem { width: 62px; text-align: center; }
+        #stokTable th.c-kalan, #stokTable th.c-eksik, #stokTable th.c-fazla,
+        #stokTable th.c-sktGecenMiktar { text-align: right; }
+        #stokTable th.c-no, #stokTable th.c-islem, #stokTable th.c-durum { text-align: center; }
+        #stokTable td.cell-id { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #stokTable input.cell-input[data-field="skt"],
+        #stokTable input.cell-input[data-field="sktGecenTarih"] { font-size: 11px; }
+        #stokTable input.cell-input[data-field="aciklama"] { font-size: 11px; }
+
+        .badge { display: inline-block; padding: 1px 6px; border-radius: 12px; font-size: 10px; font-weight: 600; color: white; }
+        .badge-fazla { background-color: #27ae60; }
+        .badge-eksik { background-color: #e74c3c; }
+        .badge-normal { background-color: #95a5a6; }
+
+        .alert { padding: 6px 12px; border-radius: 6px; margin: 4px 0; font-weight: 500; font-size: 12px; }
+        .alert-danger { background-color: #fde8e8; border-left: 4px solid #e74c3c; }
+        .alert-success { background-color: #e8f8f0; border-left: 4px solid #27ae60; }
+        .alert-info { background-color: #e8f0fe; border-left: 4px solid #3498db; }
+        .alert-warning { background-color: #fef9e7; border-left: 4px solid #f1c40f; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; margin: 6px 0 10px 0; }
+        .stat-card { background: #f8f9fa; padding: 6px 8px; border-radius: 6px; text-align: center; border: 1px solid #e9ecef; }
+        .stat-card .number { font-size: 18px; font-weight: 700; color: #2c3e50; }
+        .stat-card .label { font-size: 9px; color: #7f8c8d; margin-top: 1px; }
+        .stat-card.highlight { background: #eafaf1; border-color: #27ae60; }
+        .stat-card.danger { background: #fdedec; border-color: #e74c3c; }
+
+        .date-badge { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e9ecef; }
+        .date-badge.warning { background: #fde8e8; color: #c0392b; }
+
+        .table-footer { padding: 4px 8px; background: #f8f9fa; border-top: 1px solid #e9ecef; font-size: 11px; color: #6c757d; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+
+        /* Sıralanabilir başlıklar + sütun filtre satırı */
+        thead th.sortable { cursor: pointer; user-select: none; }
+        thead th.sortable:hover { background-color: #46617d; }
+        thead th .sort-ind { opacity: .55; font-size: 9px; margin-left: 2px; }
+        thead th.sorted .sort-ind { opacity: 1; }
+        tr.filter-row th {
+            position: sticky; top: 25px; z-index: 9;
+            background: #eef3f8; padding: 2px 3px; border-bottom: 1px solid #dbe4ec;
+        }
+        tr.filter-row th .col-filter {
+            width: 100%; padding: 2px 4px; font-size: 11px; font-weight: 400;
+            border: 1px solid #cfd8e3; border-radius: 4px; background: #fff; color: #333;
+            min-height: 22px; box-sizing: border-box;
+        }
+        tr.filter-row th .col-filter:focus { outline: none; border-color: #4285f4; box-shadow: 0 0 0 2px rgba(66,133,244,.18); }
+        tr.filter-row th .col-filter.active { border-color: #e67e22; background: #fff8ef; }
+        .filter-reset { background: #dfe7ef; color: #34495e; border: 1px solid #cfd8e3; border-radius: 4px; width: 100%; min-height: 22px; cursor: pointer; font-size: 11px; padding: 0; }
+        .filter-reset:hover { background: #cfdbe8; }
+
+        /* Satır içi düzenleme */
+        .cell-input {
+            width: 100%; padding: 2px 4px; font-size: 12px; font-family: inherit; color: #2c3e50;
+            border: 1px solid transparent; border-radius: 4px; background: transparent; box-sizing: border-box;
+        }
+        .cell-input:hover { border-color: #d7dee6; background: #fff; }
+        .cell-input:focus { outline: none; border-color: #4285f4; background: #fff; box-shadow: 0 0 0 2px rgba(66,133,244,.18); }
+        .cell-input.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .cell-input.text { text-overflow: ellipsis; }
+        .cell-input.edited { border-color: #f0b429; background: #fffdf5; }
+        .row-actions { display: flex; gap: 3px; justify-content: center; }
+        .btn-row-del { background: #fde8e8; color: #c0392b; border: 1px solid #f5b7b1; border-radius: 4px; cursor: pointer; font-size: 11px; padding: 1px 5px; }
+        .btn-row-del:hover { background: #f8d7da; }
+        tfoot .totals-row td { background: #fffbeb; font-weight: 700; border-top: 2px solid #f0b429; border-bottom: none; color: #7a5c00; }
+        .col-hint { font-size: 10px; color: #8a99ab; padding: 2px 6px; }
+        th textarea.col-filter { display: none; }
+        .d-none { display: none; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .text-muted { color: #6c757d; font-size: 12px; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .highlight-fazla { background-color: #eafaf1 !important; }
+        .highlight-eksik { background-color: #fdedec !important; }
+        .auto-save-badge { background: #27ae60; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .excel-meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12px; color: #495057; margin-bottom: 8px; }
+        .excel-meta .file-chip { background: #e8f8f0; border: 1px solid #b7e4c7; color: #1e7e34; padding: 3px 10px; border-radius: 12px; font-weight: 600; }
+        .source-hint { font-size: 11px; color: #6c757d; margin-top: 8px; line-height: 1.5; }
+        .source-hint code { background: #f1f3f5; padding: 1px 4px; border-radius: 3px; }
+
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 10px; padding: 20px; max-width: 1000px; width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e9ecef; padding-bottom: 10px; margin-bottom: 15px; }
+        .modal-header h2 { margin: 0; border-bottom: none; }
+        .modal-close { background: none; border: none; font-size: 28px; cursor: pointer; color: #999; padding: 0 8px; }
+        .modal-close:hover { color: #333; }
+
+        .multi-select-item { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #f8f9fa; border-radius: 4px; margin-bottom: 4px; border: 1px solid #e9ecef; flex-wrap: wrap; }
+        .multi-select-item select { flex: 2; min-width: 150px; }
+        .multi-select-item input { width: 80px; }
+        .multi-select-item .btn-remove { background: #dc3545; color: white; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+
+        .selected-items-list { max-height: 250px; overflow-y: auto; border: 1px solid #e9ecef; border-radius: 4px; padding: 8px; margin-top: 8px; background: #fff; }
+        .selected-items-list .item-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+        .selected-items-list .item-row:last-child { border-bottom: none; }
+        .selected-items-list .item-row .info { flex: 2; }
+        .selected-items-list .item-row .qty { font-weight: 600; color: #28a745; margin: 0 10px; min-width: 60px; text-align: right; }
+        .selected-items-list .item-row .btn-remove-item { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 16px; padding: 0 4px; }
+
+        .export-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .export-buttons .btn { padding: 6px 16px; }
+
+        .eksik-info-box {
+            background: #fdedec;
+            border: 1px solid #e74c3c;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .eksik-info-box .label { font-weight: 600; color: #c0392b; }
+        .eksik-info-box .value { font-size: 18px; font-weight: 700; color: #c0392b; }
+        .eksik-info-box .progress-container { flex: 1; min-width: 150px; }
+        .eksik-info-box .progress-bar-bg { width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+        .eksik-info-box .progress-bar-fill { height: 100%; background: #28a745; border-radius: 4px; transition: width 0.3s; }
+        .eksik-info-box .progress-text { font-size: 12px; color: #6c757d; margin-top: 2px; }
+
+        /* SEARCHABLE DROPDOWN */
+        .searchable-dropdown {
+            position: relative;
+            width: 100%;
+        }
+
+        .searchable-dropdown .dropdown-display {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 13px;
+            min-height: 32px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: border-color 0.2s;
+            user-select: none;
+        }
+
+        .searchable-dropdown .dropdown-display:hover {
+            border-color: #999;
+        }
+
+        .searchable-dropdown .dropdown-display:focus-within {
+            border-color: #4285f4;
+            box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+        }
+
+        .searchable-dropdown .dropdown-display .display-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #333;
+        }
+
+        .searchable-dropdown .dropdown-display .display-text.placeholder {
+            color: #6c757d;
+        }
+
+        .searchable-dropdown .dropdown-display .display-arrow {
+            color: #6c757d;
+            font-size: 12px;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+
+        .searchable-dropdown .dropdown-display .display-clear {
+            color: #999;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 4px;
+            display: none;
+            flex-shrink: 0;
+        }
+
+        .searchable-dropdown .dropdown-display .display-clear.show {
+            display: block;
+        }
+
+        .searchable-dropdown .dropdown-display .display-clear:hover {
+            color: #333;
+        }
+
+        .searchable-dropdown .dropdown-search-input {
+            display: none;
+            width: 100%;
+            padding: 5px 8px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            min-height: 30px;
+            background: transparent;
+            outline: none;
+            color: #333;
+        }
+
+        .searchable-dropdown .dropdown-search-input:focus {
+            outline: none;
+        }
+
+        .searchable-dropdown .dropdown-list {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 250px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            margin-top: 2px;
+        }
+
+        .searchable-dropdown .dropdown-list.show {
+            display: block;
+        }
+
+        .searchable-dropdown .dropdown-item {
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.15s;
+        }
+
+        .searchable-dropdown .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .searchable-dropdown .dropdown-item:hover {
+            background-color: #e8f0fe;
+        }
+
+        .searchable-dropdown .dropdown-item.selected {
+            background-color: #4285f4;
+            color: white;
+        }
+
+        .searchable-dropdown .dropdown-item .item-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .searchable-dropdown .dropdown-item .tag {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-size: 9px;
+            margin-left: 6px;
+            background: #e9ecef;
+            color: #6c757d;
+            flex-shrink: 0;
+        }
+
+        .searchable-dropdown .dropdown-item .tag.fazla {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .searchable-dropdown .dropdown-item .tag.eksik {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .searchable-dropdown .dropdown-item .tag.normal {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .searchable-dropdown .dropdown-empty {
+            padding: 12px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 13px;
+        }
+
+        .searchable-dropdown .dropdown-counter {
+            padding: 4px 12px;
+            font-size: 11px;
+            color: #6c757d;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            text-align: center;
+        }
+
+        .searchable-dropdown.open .dropdown-display {
+            border-color: #4285f4;
+            box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+        }
+
+        .searchable-dropdown.open .dropdown-search-input {
+            display: block;
+        }
+
+        .searchable-dropdown.open .display-text {
+            display: none;
+        }
+
+        .searchable-dropdown.open .display-arrow {
+            transform: rotate(180deg);
+        }
+
+        .searchable-dropdown.disabled .dropdown-display {
+            background: #e9ecef;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .searchable-dropdown.disabled .dropdown-display:hover {
+            border-color: #ced4da;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="flex-between">
+            <div>
+                <h1>📦 Stok Yönetimi</h1>
+                <p class="subtitle">Firebase (Firestore) ile ortak çalışma</p>
+            </div>
+            <span class="auto-save-badge" id="syncStatus">☁️ Firebase</span>
+        </div>
+
+        <div id="globalAlerts"></div>
+
+        <div id="connectionStatus" class="connection-status disconnected">
+            <span class="status-dot red"></span>
+            <span>Firebase bağlantısı kuruluyor...</span>
+        </div>
+
+        <!-- Firebase Veri Kaynağı -->
+        <div class="section">
+            <div class="flex-between">
+                <h2 style="border-bottom:none;padding-bottom:0;margin:0;">☁️ Firebase Veri Kaynağı</h2>
+                <span class="text-muted" id="cloudHeaderText">Bağlantı kuruluyor...</span>
+            </div>
+
+            <div class="excel-meta">
+                <span class="file-chip" id="cloudChip">☁️ Firestore</span>
+                <span id="cloudMetaText">Veriler hazırlanıyor...</span>
+            </div>
+
+            <div class="btn-group">
+                <button id="cloudReloadBtn" class="btn btn-info">🔄 Buluttan Yenile</button>
+                <button id="templateImportBtn" class="btn btn-primary">📥 Şablondan Yükle (Excel)</button>
+                <button id="cloudUploadAllBtn" class="btn btn-success">☁️ Tümünü Buluta Yaz</button>
+                <button id="excelBackupBtn" class="btn btn-secondary">📤 Excel'e Yedekle</button>
+            </div>
+
+            <div class="file-upload-area" id="templateUploadArea">
+                <span class="icon">📁</span>
+                <span class="text">Şablon (Excel) dosyasını sürükleyin veya tıklayın (.xlsx / .xls)</span>
+                <br>
+                <span class="file-name" id="templateFileName"></span>
+                <input type="file" id="templateFileInput" accept=".xlsx,.xls,.csv">
+            </div>
+
+            <div class="source-hint">
+                💡 <strong>Şablondan yükleme:</strong> aynı ID'li malzemelerin miktarları güncellenir, listede olmayan yeni malzemeler eklenir; buluttaki diğer kayıtlar korunur.
+            </div>
+            <div class="source-hint" id="firebaseHint">
+                🔧 Firebase ayarı: <code>firebase-config.js</code> dosyasındaki <code>projectId</code> ve <code>apiKey</code> alanlarını doldurun.
+            </div>
+        </div>
+
+        <!-- Stok Listesi -->
+        <div class="section">
+            <div class="flex-between">
+                <h2 style="border-bottom:none;padding-bottom:0;margin:0;">📊 Stok Listesi</h2>
+                <span class="text-muted" id="lastUpdate"></span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card"><div class="number" id="totalProductCount">0</div><div class="label">Toplam</div></div>
+                <div class="stat-card highlight"><div class="number" id="totalFazlaCount">0</div><div class="label">Fazla</div></div>
+                <div class="stat-card highlight"><div class="number" id="totalFazlaAmount">0</div><div class="label">Fazla Miktar</div></div>
+                <div class="stat-card danger"><div class="number" id="totalEksikCount">0</div><div class="label">Eksik</div></div>
+                <div class="stat-card danger"><div class="number" id="totalEksikAmount">0</div><div class="label">Eksik Miktar</div></div>
+                <div class="stat-card"><div class="number" id="totalNormalCount">0</div><div class="label">Normal</div></div>
+            </div>
+
+            <div class="filter-buttons">
+                <button class="btn btn-secondary btn-active" data-filter="all" onclick="setFilter('all')">Tümü (<span id="filterAllCount">0</span>)</button>
+                <button class="btn btn-success" data-filter="fazla" onclick="setFilter('fazla')">Fazla (<span id="filterFazlaCount">0</span>)</button>
+                <button class="btn btn-danger" data-filter="eksik" onclick="setFilter('eksik')">Eksik (<span id="filterEksikCount">0</span>)</button>
+                <button class="btn btn-secondary" data-filter="normal" onclick="setFilter('normal')">Normal (<span id="filterNormalCount">0</span>)</button>
+                <button class="btn btn-info" onclick="exportFilteredList()">📤 Dışa Aktar (Excel)</button>
+                <button class="btn btn-danger" onclick="exportMainListPDF()">📄 PDF</button>
+                <button class="btn btn-primary" onclick="openMultiUseModal()">📦 Eksik Kapat (Çoklu)</button>
+                <button class="btn btn-warning" onclick="openMultiFazlaKullanModal()">📉 Fazla Kullan (Çoklu)</button>
+                <button class="btn btn-success" onclick="openAddItemModal()">➕ Yeni Malzeme</button>
+            </div>
+
+            <div class="table-wrapper">
+                <table id="stokTable">
+                    <thead>
+                        <tr>
+                            <th class="sortable c-no" data-sort="sira">#<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-id" data-sort="id">ID<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-ad" data-sort="ad">Malzeme Adı<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-mkys" data-sort="mkys">MKYS Kodu<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-kalan" data-sort="kalan">Kalan<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-eksik" data-sort="eksik">Eksik<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-fazla" data-sort="fazla">Fazla<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-rafSkt" data-sort="rafSkt">RAF SKT<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-skt" data-sort="skt">SKT<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-sktGecenMiktar" data-sort="sktGecenMiktar">SKT Geçen Miktar<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-sktGecenTarih" data-sort="sktGecenTarih">SKT Geçen Tarih<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-aciklama" data-sort="aciklama">Açıklama<span class="sort-ind">▲</span></th>
+                            <th class="sortable c-durum" data-sort="durum">Durum<span class="sort-ind">▲</span></th>
+                            <th class="c-islem">İşlem</th>
+                        </tr>
+                        <tr class="filter-row" id="filterRow">
+                            <th class="c-no"><button type="button" class="filter-reset" id="clearColFilters" title="Tüm sütun filtrelerini temizle">✕</button></th>
+                            <th class="c-id"><input class="col-filter" data-col="id" placeholder="ID ara..." autocomplete="off"></th>
+                            <th class="c-ad"><input class="col-filter" data-col="ad" placeholder="Ad ara..." autocomplete="off"></th>
+                            <th class="c-mkys"><input class="col-filter" data-col="mkys" placeholder="MKYS ara..." autocomplete="off"></th>
+                            <th class="c-kalan">
+                                <select class="col-filter" data-col="kalan">
+                                    <option value="">Tümü</option>
+                                    <option value="gt0">&gt; 0</option>
+                                    <option value="eq0">= 0</option>
+                                </select>
+                            </th>
+                            <th class="c-eksik">
+                                <select class="col-filter" data-col="eksik">
+                                    <option value="">Tümü</option>
+                                    <option value="gt0">&gt; 0</option>
+                                    <option value="eq0">= 0</option>
+                                </select>
+                            </th>
+                            <th class="c-fazla">
+                                <select class="col-filter" data-col="fazla">
+                                    <option value="">Tümü</option>
+                                    <option value="gt0">&gt; 0</option>
+                                    <option value="eq0">= 0</option>
+                                </select>
+                            </th>
+                            <th class="c-rafSkt">
+                                <select class="col-filter" data-col="rafSkt">
+                                    <option value="">Tümü</option>
+                                    <option value="filled">Dolu</option>
+                                    <option value="empty">Boş</option>
+                                    <option value="past">Geçmiş</option>
+                                </select>
+                            </th>
+                            <th class="c-skt">
+                                <select class="col-filter" data-col="skt">
+                                    <option value="">Tümü</option>
+                                    <option value="filled">Dolu</option>
+                                    <option value="empty">Boş</option>
+                                    <option value="past">Geçmiş</option>
+                                </select>
+                            </th>
+                            <th class="c-sktGecenMiktar">
+                                <select class="col-filter" data-col="sktGecenMiktar">
+                                    <option value="">Tümü</option>
+                                    <option value="gt0">&gt; 0</option>
+                                    <option value="eq0">= 0</option>
+                                </select>
+                            </th>
+                            <th class="c-sktGecenTarih">
+                                <select class="col-filter" data-col="sktGecenTarih">
+                                    <option value="">Tümü</option>
+                                    <option value="filled">Dolu</option>
+                                    <option value="empty">Boş</option>
+                                </select>
+                            </th>
+                            <th class="c-aciklama"><input class="col-filter" data-col="aciklama" placeholder="Açıklama ara..." autocomplete="off"></th>
+                            <th class="c-durum">
+                                <select class="col-filter" data-col="durum">
+                                    <option value="">Tümü</option>
+                                    <option value="eksik">Eksik</option>
+                                    <option value="fazla">Fazla</option>
+                                    <option value="normal">Normal</option>
+                                </select>
+                            </th>
+                            <th class="c-islem"><span class="col-hint" title="Hücreler doğrudan düzenlenebilir">✏️</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <tr><td colspan="14" class="text-center text-muted">📂 Veriler yükleniyor...</td></tr>
+                    </tbody>
+                    <tfoot id="tableFoot"></tfoot>
+                </table>
+            </div>
+            <div class="table-footer">
+                <span id="tableInfo">Gösterilen: 0 kayıt</span>
+                <span id="filterStatus">Filtre: Tümü</span>
+            </div>
+        </div>
+
+        <!-- Eksik Kapatma (Tekli) - SEARCHABLE DROPDOWN ile -->
+        <div class="section">
+            <h2>🔄 Eksik Kapatma (Tekli)</h2>
+            <div class="flex-row">
+                <div>
+                    <h3>1. Eksik Malzeme</h3>
+                    <div class="form-group">
+                        <div class="searchable-dropdown" id="eksikDropdown">
+                            <div class="dropdown-display">
+                                <span class="display-text placeholder">-- Seçiniz --</span>
+                                <input class="dropdown-search-input" type="text" placeholder="Ara..." autocomplete="off">
+                                <span class="display-clear">✕</span>
+                                <span class="display-arrow">▼</span>
+                            </div>
+                            <div class="dropdown-list"></div>
+                        </div>
+                    </div>
+                    <div id="eksikDetail" class="alert alert-info d-none">
+                        <strong id="eksikAdi"></strong> — Eksik: <strong id="eksikMiktar"></strong>
+                    </div>
+                </div>
+                <div>
+                    <h3>2. Kaynak Malzeme</h3>
+                    <div class="form-group">
+                        <div class="searchable-dropdown disabled" id="kaynakDropdown">
+                            <div class="dropdown-display">
+                                <span class="display-text placeholder">Önce eksik seçin</span>
+                                <input class="dropdown-search-input" type="text" placeholder="Ara..." autocomplete="off">
+                                <span class="display-clear">✕</span>
+                                <span class="display-arrow">▼</span>
+                            </div>
+                            <div class="dropdown-list"></div>
+                        </div>
+                    </div>
+                    <div id="fazlaDetail" class="alert alert-success d-none">
+                        <strong id="fazlaAdi"></strong> — Mevcut: <strong id="fazlaMiktar"></strong>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label for="kapatMiktar">Miktar</label><input type="number" id="kapatMiktar" min="1" value="1"></div>
+                        <div class="form-group" style="flex:0 0 auto;"><button id="kapatBtn" class="btn btn-success">✅ Kapat</button></div>
+                    </div>
+                </div>
+            </div>
+            <div id="kapatSonuc" class="alert d-none"></div>
+        </div>
+
+        <!-- Fazla Kullanım (Tekli) -->
+        <div class="section">
+            <h2>⚙️ Fazla Malzeme Kullan (Tekli)</h2>
+            <div class="dual-form">
+                <div class="form-group">
+                    <label for="fazlaKullanSelect">Fazla Malzeme</label>
+                    <select id="fazlaKullanSelect"><option value="">-- Seçin --</option></select>
+                </div>
+                <div class="form-group"><label for="fazlaKullanMiktar">Miktar</label><input type="number" id="fazlaKullanMiktar" min="1" value="1"></div>
+                <div class="form-group"><button id="fazlaKullanBtn" class="btn btn-warning">📉 Kullan</button></div>
+            </div>
+            <div id="fazlaKullanSonuc" class="alert d-none"></div>
+        </div>
+    </div>
+
+    <!-- YENİ MALZEME MODALI -->
+    <div class="modal-overlay" id="addItemModal">
+        <div class="modal" style="max-width:560px;">
+            <div class="modal-header">
+                <h2>➕ Yeni Malzeme Ekle</h2>
+                <button class="modal-close" onclick="closeAddItemModal()">✕</button>
+            </div>
+            <div class="form-row" style="margin-bottom:8px;">
+                <div class="form-group">
+                    <label for="newItemId">Malzeme ID *</label>
+                    <input type="text" id="newItemId" placeholder="ör. 9500" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="newItemMkys">MKYS Kodu</label>
+                    <input type="text" id="newItemMkys" placeholder="150-03-03-..." autocomplete="off">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="newItemAd">Malzeme Adı *</label>
+                <input type="text" id="newItemAd" placeholder="Malzeme adı" autocomplete="off">
+            </div>
+            <div class="form-row" style="margin-bottom:8px;">
+                <div class="form-group"><label for="newItemKalan">Kalan</label><input type="number" id="newItemKalan" min="0" value="0"></div>
+                <div class="form-group"><label for="newItemEksik">Eksik</label><input type="number" id="newItemEksik" min="0" value="0"></div>
+                <div class="form-group"><label for="newItemFazla">Fazla</label><input type="number" id="newItemFazla" min="0" value="0"></div>
+                <div class="form-group"><label for="newItemRafSkt">RAF SKT (AA/YYYY)</label><input type="text" id="newItemRafSkt" placeholder="12/2027" autocomplete="off"></div>
+            </div>
+            <div class="form-row" style="margin-bottom:8px;">
+                <div class="form-group"><label for="newItemSkt">SKT (GG/AA/YYYY)</label><input type="text" id="newItemSkt" placeholder="08/01/2028" autocomplete="off"></div>
+                <div class="form-group"><label for="newItemSktGecenMiktar">SKT Geçen Miktar</label><input type="number" id="newItemSktGecenMiktar" min="0" value="0"></div>
+                <div class="form-group"><label for="newItemSktGecenTarih">SKT Geçen Tarih</label><input type="text" id="newItemSktGecenTarih" placeholder="08/01/2028" autocomplete="off"></div>
+            </div>
+            <div class="form-group" style="margin-bottom:8px;">
+                <label for="newItemAciklama">Açıklama</label>
+                <input type="text" id="newItemAciklama" placeholder="Açıklama" autocomplete="off">
+            </div>
+            <div id="addItemSonuc" class="alert d-none"></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                <button class="btn btn-success" id="addItemSaveBtn">✅ Kaydet</button>
+                <button class="btn btn-secondary" onclick="closeAddItemModal()">Vazgeç</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ÇOKLU EKSİK KAPATMA MODALI -->
+    <div class="modal-overlay" id="multiUseModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📦 Eksik Kapat - Çoklu Transfer</h2>
+                <button class="modal-close" onclick="closeMultiUseModal()">✕</button>
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px;">
+                <label for="multiEksikSelect">⚠️ Kapatılacak Eksik Malzeme</label>
+                <select id="multiEksikSelect" style="width:100%; padding:6px 8px; border:1px solid #ced4da; border-radius:4px; font-size:13px; min-height:32px;">
+                    <option value="">-- Eksik malzeme seçin --</option>
+                </select>
+            </div>
+
+            <div id="multiEksikInfo" class="eksik-info-box d-none">
+                <div>
+                    <span class="label">📌 Seçilen Eksik:</span>
+                    <span id="multiEksikAdi" style="font-weight:600;"></span>
+                </div>
+                <div>
+                    <span class="label">Eksik Miktar:</span>
+                    <span class="value" id="multiEksikMiktar">0</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="multiProgressFill" style="width:0%;"></div>
+                    </div>
+                    <div class="progress-text" id="multiProgressText">0 / 0 kapatıldı</div>
+                </div>
+            </div>
+
+            <div style="margin-top:12px;">
+                <label style="font-weight:600; font-size:12px;">➕ Kullanılacak Kaynak Malzemeler</label>
+                <div class="multi-select-item">
+                    <select id="multiFazlaSelect" style="flex:2; min-width:150px;">
+                        <option value="">-- Kaynak malzeme seçin --</option>
+                    </select>
+                    <input type="number" id="multiFazlaMiktar" min="1" value="1" style="width:80px;">
+                    <button class="btn btn-success btn-sm" onclick="addMultiItem()">➕ Ekle</button>
+                </div>
+            </div>
+
+            <div style="margin-top:10px;">
+                <h4>📋 Seçilen Kaynak Malzemeler</h4>
+                <div class="selected-items-list" id="selectedItemsList">
+                    <div class="text-muted" style="text-align:center; padding:20px;">Henüz kaynak malzeme eklenmemiş</div>
+                </div>
+            </div>
+
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-success" onclick="applyMultiUse()">✅ Eksiği Kapat</button>
+                <button class="btn btn-secondary" onclick="clearMultiItems()">🗑️ Temizle</button>
+            </div>
+
+            <div class="export-buttons">
+                <button class="btn btn-info" onclick="exportMultiExcel()">📊 Excel</button>
+                <button class="btn btn-danger" onclick="exportMultiPDF()">📄 PDF</button>
+            </div>
+
+            <div id="multiSonuc" class="alert d-none" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <!-- ÇOKLU FAZLA KULLANIM MODALI -->
+    <div class="modal-overlay" id="multiFazlaKullanModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📉 Çoklu Fazla Kullanım</h2>
+                <button class="modal-close" onclick="closeMultiFazlaKullanModal()">✕</button>
+            </div>
+
+            <div style="margin-top:12px;">
+                <label style="font-weight:600; font-size:12px;">➕ Kullanılacak Fazla Malzemeler</label>
+                <div class="multi-select-item">
+                    <select id="multiFazlaKullanSelect" style="flex:2; min-width:150px;">
+                        <option value="">-- Fazla malzeme seçin --</option>
+                    </select>
+                    <input type="number" id="multiFazlaKullanMiktar" min="1" value="1" style="width:80px;">
+                    <button class="btn btn-success btn-sm" onclick="addMultiFazlaKullanItem()">➕ Ekle</button>
+                </div>
+            </div>
+
+            <div style="margin-top:10px;">
+                <h4>📋 Kullanılacak Fazla Malzemeler</h4>
+                <div class="selected-items-list" id="selectedFazlaKullanList">
+                    <div class="text-muted" style="text-align:center; padding:20px;">Henüz malzeme eklenmemiş</div>
+                </div>
+            </div>
+
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-warning" onclick="applyMultiFazlaKullan()">📉 Kullan</button>
+                <button class="btn btn-secondary" onclick="clearMultiFazlaKullanItems()">🗑️ Temizle</button>
+            </div>
+
+            <div class="export-buttons">
+                <button class="btn btn-info" onclick="exportMultiFazlaKullanExcel()">📊 Excel</button>
+                <button class="btn btn-danger" onclick="exportMultiFazlaKullanPDF()">📄 PDF</button>
+            </div>
+
+            <div id="multiFazlaKullanSonuc" class="alert d-none" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  UYGULAMA DURUMU
+        // ============================================================
+
+        let inventory = [];
+        let currentFilter = 'all';
+
+        // Tablo görünümü: sıralama + sütun filtreleri
+        let sortKey = null;
+        let sortDir = 1;
+        const colFilters = {
+            id: '', ad: '', mkys: '', kalan: '', eksik: '', fazla: '',
+            rafSkt: '', skt: '', sktGecenMiktar: '', sktGecenTarih: '', aciklama: '', durum: ''
+        };
+        let selectRefreshTimer = null;
+        const pendingDeletes = new Set();
+
+        let multiItems = [];
+        let selectedEksikId = null;
+        let multiFazlaKullanItems = [];
+
+        const BUNDLED_TEMPLATE_FILES = ['StokSayimRapor.xlsx', 'stoksayimrapor.xlsx', 'StokSayimRapor.XLSX'];
+
+        // ============================================================
+        //  YARDIMCI FONKSİYONLAR
+        // ============================================================
+        function formatNumber(num) {
+            if (num === undefined || num === null || isNaN(num)) return '0';
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        }
+
+        function isSktGecen(rafSkt) {
+            if (!rafSkt) return false;
+            const match = rafSkt.match(/^(\d{1,2})\/(\d{4})$/);
+            if (match) {
+                const month = parseInt(match[1]);
+                const year = parseInt(match[2]);
+                const now = new Date();
+                const currentMonth = now.getMonth() + 1;
+                const currentYear = now.getFullYear();
+                if (year < currentYear) return true;
+                if (year === currentYear && month < currentMonth) return true;
+                return false;
+            }
+            return false;
+        }
+
+        function excelDateToMMYYYY(serial) {
+            if (!serial) return '';
+            if (serial instanceof Date && !isNaN(serial.getTime())) {
+                return String(serial.getMonth() + 1).padStart(2, '0') + '/' + serial.getFullYear();
+            }
+            if (typeof serial === 'string') {
+                if (serial.match(/^\d{1,2}\/\d{4}$/)) return serial;
+                if (serial.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    const parts = serial.split('-');
+                    if (parts.length >= 2) return parts[1] + '/' + parts[0];
+                    return serial;
+                }
+                const num = parseFloat(serial);
+                if (!isNaN(num) && num > 0) serial = num;
+                else return serial;
+            }
+            if (typeof serial === 'number' && serial > 0) {
+                const excelEpoch = new Date(1899, 11, 30);
+                const date = new Date(excelEpoch.getTime() + serial * 86400000);
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                return month + '/' + year;
+            }
+            return String(serial);
+        }
+
+        function normalizeHeader(value) {
+            return String(value == null ? '' : value)
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLocaleUpperCase('tr-TR');
+        }
+
+        function buildColMap(headers) {
+            const h = (headers || []).map(normalizeHeader);
+            const pick = (exactNames, fallback) => {
+                for (const name of exactNames) {
+                    const idx = h.indexOf(name);
+                    if (idx !== -1) return idx;
+                }
+                return h.findIndex(fallback);
+            };
+            return {
+                id: pick(['MALZEME ID', 'ID', 'STOK ID'], x => x.includes('MALZEME ID')),
+                ad: pick(['MALZEME ADI', 'ADI'], x => x.includes('MALZEME ADI') || x.includes('ADI')),
+                mkys: pick(['MKYS MALZEME KODU', 'MKYS KODU'], x => x.includes('MKYS')),
+                kalan: pick(['KALAN MIKTAR', 'KALAN MİKTAR', 'KALAN'], x => x.includes('KALAN')),
+                eksik: pick(['EKSIK', 'EKSİK'], x => x.includes('EKSİK') || x.includes('EKSIK')),
+                fazla: pick(['FAZLA'], x => x.includes('FAZLA')),
+                rafSkt: pick(['RAF SKT'], x => x.includes('RAF SKT') || (x.includes('RAF') && x.includes('SKT'))),
+                skt: pick(['SKT'], x => x.includes('SKT') && !x.includes('RAF')),
+                sktGecenMiktar: pick(['SKT GECEN MIKTAR', 'SKT GEÇEN MİKTAR'], x => x.includes('GEÇEN') && x.includes('MİKTAR')),
+                sktGecenTarih: pick(['SKT GECEN TARIH', 'SKT GEÇEN TARİH'], x => x.includes('GEÇEN') && x.includes('TARİH')),
+                aciklama: pick(['ACIKLAMA', 'AÇIKLAMA'], x => x.includes('AÇIKLAMA') || x.includes('ACIKLAMA')),
+                ortu: pick(['ORTU', 'ÖRTÜ'], x => x.includes('ORTÜ') || x === 'ORTU')
+            };
+        }
+
+        function toSafeNumber(value) {
+            if (value === null || value === undefined || value === '') return 0;
+            if (typeof value === 'number') return isNaN(value) ? 0 : value;
+            const text = String(value).trim();
+            if (!text || normalizeHeader(text) === 'TAM') return 0;
+            const clean = text.replace(/\s/g, '');
+            if (/^-?\d+(,\d+)?$/.test(clean)) return parseFloat(clean.replace(',', '.')) || 0;
+            if (/^-?\d+(\.\d+)?$/.test(clean)) return parseFloat(clean) || 0;
+            return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
+        }
+
+        function rowToItem(row, colMap) {
+            const cell = (idx) => (idx >= 0 && row ? row[idx] : '');
+            const eksikValue = cell(colMap.eksik);
+            const fazlaValue = cell(colMap.fazla);
+            return {
+                id: String(cell(colMap.id) == null ? '' : cell(colMap.id)).trim(),
+                ad: String(cell(colMap.ad) == null ? '' : cell(colMap.ad)).replace(/\s+/g, ' ').trim(),
+                mkys: String(cell(colMap.mkys) == null ? '' : cell(colMap.mkys)).trim(),
+                kalan: toSafeNumber(cell(colMap.kalan)),
+                eksik: normalizeHeader(eksikValue) === 'TAM' ? 0 : toSafeNumber(eksikValue),
+                fazla: normalizeHeader(fazlaValue) === 'TAM' ? 0 : toSafeNumber(fazlaValue),
+                rafSkt: excelDateToMMYYYY(cell(colMap.rafSkt) || ''),
+                skt: toIsoDate(cell(colMap.skt)),
+                sktGecenMiktar: toSafeNumber(cell(colMap.sktGecenMiktar)),
+                sktGecenTarih: toIsoDate(cell(colMap.sktGecenTarih)),
+                aciklama: cell(colMap.aciklama) || '',
+                ortu: cell(colMap.ortu) || ''
+            };
+        }
+
+        function rowsToInventory(rows, colMap) {
+            const items = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row) continue;
+                const item = rowToItem(row, colMap);
+                if (item.id && item.ad) items.push(item);
+            }
+            return items;
+        }
+
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('globalAlerts');
+            const div = document.createElement('div');
+            div.className = `alert alert-${type}`;
+            div.textContent = message;
+            container.appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        }
+
+        function updateConnectionStatus(status, message) {
+            const el = document.getElementById('connectionStatus');
+            const dot = el.querySelector('.status-dot');
+            el.className = `connection-status ${status}`;
+            dot.className = `status-dot ${status === 'connected' ? 'green' : status === 'loading' ? 'yellow' : 'red'}`;
+            const span = el.querySelector('span:last-child');
+            if (span) span.textContent = message;
+        }
+
+        function esc(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function itemStatus(item) {
+            if ((Number(item.eksik) || 0) > 0) return 'eksik';
+            if ((Number(item.fazla) || 0) > 0) return 'fazla';
+            return 'normal';
+        }
+
+        function normalizeRafSkt(value) {
+            const text = String(value == null ? '' : value).trim();
+            if (!text) return '';
+            const m = text.match(/^(\d{1,2})\s*[\/.\-]\s*(\d{4})$/);
+            if (m) {
+                const month = parseInt(m[1], 10);
+                const year = parseInt(m[2], 10);
+                if (month >= 1 && month <= 12 && year >= 1900) return String(month).padStart(2, '0') + '/' + year;
+            }
+            const digits = text.replace(/\D/g, '');
+            if (digits.length === 6) return digits.slice(0, 2) + '/' + digits.slice(2);
+            return text;
+        }
+
+        function sktSortValue(rafSkt) {
+            const m = String(rafSkt || '').match(/^(\d{1,2})\/(\d{4})$/);
+            if (!m) return Number.MAX_SAFE_INTEGER;
+            return parseInt(m[2], 10) * 12 + parseInt(m[1], 10);
+        }
+
+        function parseDateParts(value) {
+            if (value instanceof Date && !isNaN(value.getTime())) {
+                return { y: value.getFullYear(), m: value.getMonth() + 1, d: value.getDate() };
+            }
+            const text = String(value == null ? '' : value).trim();
+            if (!text) return null;
+            // Saat içeren ISO değerleri yerel saate göre çöz (Excel'den gelen gün kaymasını önler)
+            if (/^\d{4}-\d{1,2}-\d{1,2}T/.test(text)) {
+                const parsed = new Date(text);
+                if (!isNaN(parsed.getTime())) {
+                    return { y: parsed.getFullYear(), m: parsed.getMonth() + 1, d: parsed.getDate() };
+                }
+            }
+            let m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (m) {
+                const y = +m[1], mo = +m[2], d = +m[3];
+                if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return { y, m: mo, d };
+                return null;
+            }
+            m = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+            if (m) {
+                const d = +m[1], mo = +m[2], y = +m[3];
+                if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return { y, m: mo, d };
+            }
+            return null;
+        }
+
+        // Firestore'da sabit biçim: YYYY-MM-DD. Çözülemeyen metin olduğu gibi kalır.
+        function toIsoDate(value) {
+            const p = parseDateParts(value);
+            if (!p) return String(value == null ? '' : value).trim();
+            return `${String(p.y).padStart(4, '0')}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+        }
+
+        function formatDateDisplay(value) {
+            const p = parseDateParts(value);
+            if (!p) return String(value == null ? '' : value).trim();
+            return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${p.y}`;
+        }
+
+        function dateSortValue(value) {
+            const p = parseDateParts(value);
+            if (!p) return Number.MAX_SAFE_INTEGER;
+            return p.y * 10000 + p.m * 100 + p.d;
+        }
+
+        function isDatePast(value) {
+            const p = parseDateParts(value);
+            if (!p) return false;
+            const now = new Date();
+            if (p.y < now.getFullYear()) return true;
+            if (p.y > now.getFullYear()) return false;
+            return p.m < now.getMonth() + 1;
+        }
+
+        function getFilteredData(filter) {
+            if (filter === 'fazla') return inventory.filter(item => item.fazla > 0);
+            if (filter === 'eksik') return inventory.filter(item => item.eksik > 0);
+            if (filter === 'normal') return inventory.filter(item => item.eksik === 0 && item.fazla === 0);
+            return inventory;
+        }
+
+        function numPasses(value, filter) {
+            if (!filter) return true;
+            const v = Number(value) || 0;
+            if (filter === 'gt0') return v > 0;
+            if (filter === 'eq0') return v === 0;
+            return true;
+        }
+
+        function textPasses(value, filter) {
+            if (!filter) return true;
+            return String(value == null ? '' : value).toLocaleLowerCase('tr-TR').includes(filter.toLocaleLowerCase('tr-TR'));
+        }
+
+        function datePasses(value, filter) {
+            if (!filter) return true;
+            const hasValue = Boolean(String(value == null ? '' : value).trim());
+            if (filter === 'filled') return hasValue;
+            if (filter === 'empty') return !hasValue;
+            if (filter === 'past') return hasValue && isDatePast(value);
+            return true;
+        }
+
+        function passesColumnFilters(item) {
+            if (!textPasses(item.id, colFilters.id)) return false;
+            if (!textPasses(item.ad, colFilters.ad)) return false;
+            if (!textPasses(item.mkys, colFilters.mkys)) return false;
+            if (!numPasses(item.kalan, colFilters.kalan)) return false;
+            if (!numPasses(item.eksik, colFilters.eksik)) return false;
+            if (!numPasses(item.fazla, colFilters.fazla)) return false;
+            if (colFilters.rafSkt === 'filled' && !item.rafSkt) return false;
+            if (colFilters.rafSkt === 'empty' && item.rafSkt) return false;
+            if (colFilters.rafSkt === 'past' && !isSktGecen(item.rafSkt)) return false;
+            if (!datePasses(item.skt, colFilters.skt)) return false;
+            if (!numPasses(item.sktGecenMiktar, colFilters.sktGecenMiktar)) return false;
+            if (!datePasses(item.sktGecenTarih, colFilters.sktGecenTarih)) return false;
+            if (!textPasses(item.aciklama, colFilters.aciklama)) return false;
+            if (colFilters.durum && itemStatus(item) !== colFilters.durum) return false;
+            return true;
+        }
+
+        function sortValueOf(item, key) {
+            if (key === 'sira') return Number(item.sira) || 0;
+            if (key === 'id') return String(item.id);
+            if (key === 'ad') return String(item.ad || '');
+            if (key === 'mkys') return String(item.mkys || '');
+            if (key === 'kalan' || key === 'eksik' || key === 'fazla' || key === 'sktGecenMiktar') return Number(item[key]) || 0;
+            if (key === 'rafSkt') return sktSortValue(item.rafSkt);
+            if (key === 'skt') return dateSortValue(item.skt);
+            if (key === 'sktGecenTarih') return dateSortValue(item.sktGecenTarih);
+            if (key === 'aciklama') return String(item.aciklama || '');
+            if (key === 'durum') return { eksik: 0, fazla: 1, normal: 2 }[itemStatus(item)];
+            return '';
+        }
+
+        function getViewRows() {
+            const rows = getFilteredData(currentFilter).filter(passesColumnFilters);
+            if (!sortKey) return rows;
+            const dir = sortDir;
+            return rows.sort((a, b) => {
+                const av = sortValueOf(a, sortKey);
+                const bv = sortValueOf(b, sortKey);
+                if (typeof av === 'number' && typeof bv === 'number') {
+                    return (av - bv) * dir || String(a.ad || '').localeCompare(String(b.ad || ''), 'tr');
+                }
+                return String(av).localeCompare(String(bv), 'tr', { numeric: true, sensitivity: 'base' }) * dir;
+            });
+        }
+
+        function hasColumnFilter() {
+            return Object.values(colFilters).some(v => v !== '');
+        }
+
+        function updateStats() {
+            const total = inventory.length;
+            const fazlaItems = inventory.filter(item => item.fazla > 0);
+            const eksikItems = inventory.filter(item => item.eksik > 0);
+            const normalItems = inventory.filter(item => item.eksik === 0 && item.fazla === 0);
+
+            document.getElementById('totalProductCount').textContent = formatNumber(total);
+            document.getElementById('totalFazlaCount').textContent = formatNumber(fazlaItems.length);
+            document.getElementById('totalFazlaAmount').textContent = formatNumber(fazlaItems.reduce((s, i) => s + i.fazla, 0));
+            document.getElementById('totalEksikCount').textContent = formatNumber(eksikItems.length);
+            document.getElementById('totalEksikAmount').textContent = formatNumber(eksikItems.reduce((s, i) => s + i.eksik, 0));
+            document.getElementById('totalNormalCount').textContent = formatNumber(normalItems.length);
+
+            document.getElementById('filterAllCount').textContent = formatNumber(total);
+            document.getElementById('filterFazlaCount').textContent = formatNumber(fazlaItems.length);
+            document.getElementById('filterEksikCount').textContent = formatNumber(eksikItems.length);
+            document.getElementById('filterNormalCount').textContent = formatNumber(normalItems.length);
+        }
+
+        function rowHTML(item, index) {
+            const status = itemStatus(item);
+            const durumText = status === 'eksik' ? `Eksik (${formatNumber(item.eksik)})`
+                            : status === 'fazla' ? `Fazla (${formatNumber(item.fazla)})` : 'Normal';
+            const badgeClass = status === 'eksik' ? 'badge-eksik' : status === 'fazla' ? 'badge-fazla' : 'badge-normal';
+            const rowClass = status === 'eksik' ? 'highlight-eksik' : status === 'fazla' ? 'highlight-fazla' : '';
+            const isDirty = dirtyIds.has(String(item.id));
+            const rafSktGecti = isSktGecen(item.rafSkt);
+            const sktGecti = isDatePast(item.skt);
+            const sktGecenGecti = isDatePast(item.sktGecenTarih);
+
+            return `<tr class="${rowClass}" data-row-id="${esc(item.id)}">
+                <td class="c-no">${index + 1}</td>
+                <td class="cell-id c-id" title="${esc(item.id)}">${esc(item.id)}</td>
+                <td class="c-ad"><input class="cell-input text${isDirty ? ' edited' : ''}" data-id="${esc(item.id)}" data-field="ad" value="${esc(item.ad)}" title="${esc(item.ad)}" autocomplete="off"></td>
+                <td class="c-mkys"><input class="cell-input text" data-id="${esc(item.id)}" data-field="mkys" value="${esc(item.mkys || '')}" title="${esc(item.mkys || '')}" placeholder="MKYS kodu" autocomplete="off"></td>
+                <td class="c-kalan"><input class="cell-input num" type="number" min="0" step="1" data-id="${esc(item.id)}" data-field="kalan" value="${Number(item.kalan) || 0}"></td>
+                <td class="c-eksik"><input class="cell-input num" type="number" min="0" step="1" data-id="${esc(item.id)}" data-field="eksik" value="${Number(item.eksik) || 0}"></td>
+                <td class="c-fazla"><input class="cell-input num" type="number" min="0" step="1" data-id="${esc(item.id)}" data-field="fazla" value="${Number(item.fazla) || 0}"></td>
+                <td class="c-rafSkt"><input class="cell-input${rafSktGecti ? ' edited' : ''}" data-id="${esc(item.id)}" data-field="rafSkt" value="${esc(item.rafSkt)}" placeholder="AA/YYYY" title="${rafSktGecti ? '⚠️ RAF SKT geçmiş' : 'AA/YYYY biçiminde girin'}" autocomplete="off"></td>
+                <td class="c-skt"><input class="cell-input${sktGecti ? ' edited' : ''}" data-id="${esc(item.id)}" data-field="skt" value="${esc(formatDateDisplay(item.skt))}" placeholder="GG/AA/YYYY" title="${sktGecti ? '⚠️ SKT geçmiş' : 'GG/AA/YYYY biçiminde girin'}" autocomplete="off"></td>
+                <td class="c-sktGecenMiktar"><input class="cell-input num" type="number" min="0" step="1" data-id="${esc(item.id)}" data-field="sktGecenMiktar" value="${Number(item.sktGecenMiktar) || 0}"></td>
+                <td class="c-sktGecenTarih"><input class="cell-input${sktGecenGecti ? ' edited' : ''}" data-id="${esc(item.id)}" data-field="sktGecenTarih" value="${esc(formatDateDisplay(item.sktGecenTarih))}" placeholder="GG/AA/YYYY" title="${sktGecenGecti ? '⚠️ Tarih geçmiş' : 'GG/AA/YYYY biçiminde girin'}" autocomplete="off"></td>
+                <td class="c-aciklama"><input class="cell-input text" data-id="${esc(item.id)}" data-field="aciklama" value="${esc(item.aciklama || '')}" title="${esc(item.aciklama || '')}" placeholder="Açıklama" autocomplete="off"></td>
+                <td class="c-durum"><span class="badge ${badgeClass}">${durumText}</span></td>
+                <td class="c-islem"><div class="row-actions">
+                    ${item.fazla > 0 ? `<button class="btn btn-warning btn-sm" data-act="use" data-id="${esc(item.id)}" title="1 adet fazla kullan">📉</button>` : ''}
+                    <button class="btn-row-del" data-act="del" data-id="${esc(item.id)}" title="Malzemeyi sil">🗑</button>
+                </div></td>
+            </tr>`;
+        }
+
+        function totalsHTML(rows) {
+            const kalan = rows.reduce((s, i) => s + (Number(i.kalan) || 0), 0);
+            const eksik = rows.reduce((s, i) => s + (Number(i.eksik) || 0), 0);
+            const fazla = rows.reduce((s, i) => s + (Number(i.fazla) || 0), 0);
+            const sktGecen = rows.reduce((s, i) => s + (Number(i.sktGecenMiktar) || 0), 0);
+            return `<tr class="totals-row">
+                <td colspan="4" class="text-right">GÖRÜNEN TOPLAM →</td>
+                <td class="text-right">${formatNumber(kalan)}</td>
+                <td class="text-right">${formatNumber(eksik)}</td>
+                <td class="text-right">${formatNumber(fazla)}</td>
+                <td class="text-center">—</td>
+                <td class="text-center">—</td>
+                <td class="text-right">${formatNumber(sktGecen)}</td>
+                <td colspan="4" class="text-center">${formatNumber(rows.length)} kayıt</td>
+            </tr>`;
+        }
+
+        function updateSortIndicators() {
+            document.querySelectorAll('#stokTable thead th.sortable').forEach(th => {
+                const active = th.dataset.sort === sortKey;
+                th.classList.toggle('sorted', active);
+                const ind = th.querySelector('.sort-ind');
+                if (ind) ind.textContent = active ? (sortDir === 1 ? '▲' : '▼') : '▲';
+            });
+            document.querySelectorAll('#filterRow .col-filter').forEach(el => {
+                el.classList.toggle('active', Boolean(el.value));
+            });
+        }
+
+        function updateTotalsRow() {
+            const tfoot = document.getElementById('tableFoot');
+            if (!tfoot) return;
+            const rows = getViewRows();
+            tfoot.innerHTML = rows.length ? totalsHTML(rows) : '';
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            const tfoot = document.getElementById('tableFoot');
+            const filterNames = { all: 'Tümü', fazla: 'Fazla', eksik: 'Eksik', normal: 'Normal' };
+            const activeCols = Object.entries(colFilters).filter(([, v]) => v !== '').length;
+            const filterLabel = `Filtre: ${filterNames[currentFilter] || 'Tümü'}${activeCols ? ` + ${activeCols} sütun` : ''}`;
+
+            updateSortIndicators();
+
+            if (inventory.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted">📂 Veri yok</td></tr>`;
+                if (tfoot) tfoot.innerHTML = '';
+                document.getElementById('tableInfo').textContent = 'Gösterilen: 0 kayıt';
+                document.getElementById('filterStatus').textContent = filterLabel;
+                updateStats();
+                return;
+            }
+
+            const rows = getViewRows();
+
+            if (rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted">🔍 Bu filtrede ürün yok</td></tr>`;
+                if (tfoot) tfoot.innerHTML = '';
+                document.getElementById('tableInfo').textContent = `Gösterilen: 0 / ${formatNumber(inventory.length)} kayıt`;
+                document.getElementById('filterStatus').textContent = filterLabel;
+                updateStats();
+                return;
+            }
+
+            tbody.innerHTML = rows.map((item, index) => rowHTML(item, index)).join('');
+            if (tfoot) tfoot.innerHTML = totalsHTML(rows);
+
+            document.getElementById('tableInfo').textContent = `Gösterilen: ${formatNumber(rows.length)} / ${formatNumber(inventory.length)} kayıt`;
+            document.getElementById('filterStatus').textContent = filterLabel;
+            updateStats();
+        }
+
+        function updateRowVisual(item) {
+            const status = itemStatus(item);
+            document.querySelectorAll('#tableBody tr[data-row-id]').forEach(tr => {
+                if (tr.dataset.rowId !== String(item.id)) return;
+                tr.classList.toggle('highlight-eksik', status === 'eksik');
+                tr.classList.toggle('highlight-fazla', status === 'fazla');
+                const badge = tr.querySelector('.badge');
+                if (badge) {
+                    badge.className = 'badge ' + (status === 'eksik' ? 'badge-eksik' : status === 'fazla' ? 'badge-fazla' : 'badge-normal');
+                    badge.textContent = status === 'eksik' ? `Eksik (${formatNumber(item.eksik)})`
+                                      : status === 'fazla' ? `Fazla (${formatNumber(item.fazla)})` : 'Normal';
+                }
+                const rafSktInput = tr.querySelector('input[data-field="rafSkt"]');
+                if (rafSktInput) {
+                    rafSktInput.classList.toggle('edited', isSktGecen(item.rafSkt));
+                    rafSktInput.title = isSktGecen(item.rafSkt) ? '⚠️ RAF SKT geçmiş' : 'AA/YYYY biçiminde girin';
+                }
+                [['skt', item.skt], ['sktGecenTarih', item.sktGecenTarih]].forEach(([field, value]) => {
+                    const el = tr.querySelector(`input[data-field="${field}"]`);
+                    if (!el) return;
+                    el.classList.toggle('edited', isDatePast(value));
+                    el.title = isDatePast(value) ? '⚠️ Tarih geçmiş' : 'GG/AA/YYYY biçiminde girin';
+                });
+                const mkysInput = tr.querySelector('input[data-field="mkys"]');
+                if (mkysInput) mkysInput.title = item.mkys || '';
+                const aciklamaInput = tr.querySelector('input[data-field="aciklama"]');
+                if (aciklamaInput) aciklamaInput.title = item.aciklama || '';
+            });
+            updateTotalsRow();
+        }
+
+        function scheduleSelectRefresh() {
+            clearTimeout(selectRefreshTimer);
+            selectRefreshTimer = setTimeout(() => populateSelects(), 250);
+        }
+
+        function handleCellEdit(input) {
+            const id = input.dataset.id;
+            const field = input.dataset.field;
+            const item = findItem(id);
+            if (!item) return;
+
+            let changed = false;
+
+            if (field === 'ad') {
+                const value = String(input.value || '').replace(/\s+/g, ' ').trim();
+                if (!value) {
+                    showAlert('❌ Malzeme adı boş olamaz.', 'warning');
+                    input.value = item.ad;
+                    return;
+                }
+                if (value !== item.ad) { item.ad = value; changed = true; }
+                input.value = item.ad;
+            } else if (field === 'rafSkt') {
+                const value = normalizeRafSkt(input.value);
+                if (value !== item.rafSkt) { item.rafSkt = value; changed = true; }
+                input.value = item.rafSkt;
+            } else if (field === 'mkys') {
+                const value = String(input.value || '').trim();
+                if (value !== (item.mkys || '')) { item.mkys = value; changed = true; }
+                input.value = item.mkys || '';
+                input.title = item.mkys || '';
+            } else if (field === 'aciklama') {
+                const value = String(input.value || '').trim();
+                if (value !== (item.aciklama || '')) { item.aciklama = value; changed = true; }
+                input.value = item.aciklama || '';
+                input.title = item.aciklama || '';
+            } else if (field === 'skt' || field === 'sktGecenTarih') {
+                const raw = String(input.value || '').trim();
+                if (raw && !parseDateParts(raw)) {
+                    showAlert('❌ Tarih "GG/AA/YYYY" biçiminde olmalı (ör. 08/01/2028).', 'warning');
+                    input.value = formatDateDisplay(item[field]);
+                    return;
+                }
+                const value = toIsoDate(raw);
+                if (value !== (item[field] || '')) { item[field] = value; changed = true; }
+                input.value = formatDateDisplay(item[field]);
+            } else {
+                const value = Math.max(0, Math.round(toSafeNumber(input.value)));
+                if (value !== (Number(item[field]) || 0)) { item[field] = value; changed = true; }
+                input.value = value;
+            }
+
+            if (!changed) return;
+
+            input.classList.add('edited');
+            markDirty(item.id);
+            saveLocalCache();
+            updateRowVisual(item);
+            updateStats();
+            scheduleSelectRefresh();
+
+            if (hasColumnFilter() || sortKey === field) {
+                // Aktif filtre/sıralama düzenlenen alana bağlıysa listeyi tazele
+                renderTable();
+            }
+        }
+
+        function clearColumnFilters() {
+            Object.keys(colFilters).forEach(key => { colFilters[key] = ''; });
+            document.querySelectorAll('#filterRow .col-filter').forEach(el => { el.value = ''; });
+            renderTable();
+        }
+
+        async function deleteItem(id) {
+            const item = findItem(id);
+            if (!item) return;
+            if (!confirm(`"${item.ad}" kaydı silinsin mi?\nBu işlem geri alınamaz.`)) return;
+
+            pendingDeletes.add(String(id));
+            inventory = inventory.filter(inv => String(inv.id) !== String(id));
+            dirtyIds.delete(String(id));
+            renderTable();
+            populateSelects();
+            saveLocalCache();
+            updateStats();
+            document.querySelectorAll('.filter-row .col-filter').forEach(el => { el.classList.toggle('active', Boolean(el.value)); });
+
+            if (!cloudReady) {
+                showAlert('🗑️ Malzeme silindi (yerel mod).', 'success');
+                return;
+            }
+
+            try {
+                await db.collection(CLOUD_COLLECTION).doc(docIdFor(id)).delete();
+                pendingDeletes.delete(String(id));
+                setCloudState('connected', `${formatNumber(inventory.length)} ürün • silindi`);
+                showAlert('🗑️ Malzeme silindi.', 'success');
+            } catch (err) {
+                pendingDeletes.delete(String(id));
+                inventory.push(item);
+                sortInventory();
+                renderTable();
+                populateSelects();
+                saveLocalCache();
+                console.error('Silme hatası:', err);
+                setCloudState('error', 'Silme hatası: ' + err.message);
+                showAlert(`❌ Buluttan silinemedi: ${err.message}`, 'danger');
+            }
+        }
+
+        window.openAddItemModal = function() {
+            const modal = document.getElementById('addItemModal');
+            modal.classList.add('active');
+            ['newItemId', 'newItemMkys', 'newItemAd', 'newItemRafSkt', 'newItemSkt', 'newItemSktGecenTarih', 'newItemAciklama'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            ['newItemKalan', 'newItemEksik', 'newItemFazla', 'newItemSktGecenMiktar'].forEach(id => {
+                document.getElementById(id).value = '0';
+            });
+            document.getElementById('addItemSonuc').classList.add('d-none');
+            document.getElementById('newItemId').focus();
+        };
+
+        window.closeAddItemModal = function() {
+            document.getElementById('addItemModal').classList.remove('active');
+        };
+
+        async function saveNewItem() {
+            const resultEl = document.getElementById('addItemSonuc');
+            const id = document.getElementById('newItemId').value.trim();
+            const ad = document.getElementById('newItemAd').value.replace(/\s+/g, ' ').trim();
+            const mkys = document.getElementById('newItemMkys').value.trim();
+            const rafSkt = normalizeRafSkt(document.getElementById('newItemRafSkt').value);
+            const kalan = Math.max(0, Math.round(toSafeNumber(document.getElementById('newItemKalan').value)));
+            const eksik = Math.max(0, Math.round(toSafeNumber(document.getElementById('newItemEksik').value)));
+            const fazla = Math.max(0, Math.round(toSafeNumber(document.getElementById('newItemFazla').value)));
+            const sktRaw = document.getElementById('newItemSkt').value.trim();
+            const sktGecenTarihRaw = document.getElementById('newItemSktGecenTarih').value.trim();
+            const skt = toIsoDate(sktRaw);
+            const sktGecenTarih = toIsoDate(sktGecenTarihRaw);
+            const sktGecenMiktar = Math.max(0, Math.round(toSafeNumber(document.getElementById('newItemSktGecenMiktar').value)));
+            const aciklama = document.getElementById('newItemAciklama').value.trim();
+
+            const fail = (message) => {
+                resultEl.className = 'alert alert-warning';
+                resultEl.textContent = message;
+                resultEl.classList.remove('d-none');
+            };
+
+            if (!id) return fail('❌ Malzeme ID zorunludur.');
+            if (!ad) return fail('❌ Malzeme adı zorunludur.');
+            if (findItem(id)) return fail(`❌ "${id}" ID'li malzeme zaten var.`);
+            if (rafSkt && !/^\d{1,2}\/\d{4}$/.test(rafSkt)) return fail('❌ RAF SKT "AA/YYYY" biçiminde olmalı (ör. 12/2027).');
+            if (sktRaw && !parseDateParts(sktRaw)) return fail('❌ SKT "GG/AA/YYYY" biçiminde olmalı (ör. 08/01/2028).');
+            if (sktGecenTarihRaw && !parseDateParts(sktGecenTarihRaw)) return fail('❌ SKT Geçen Tarih "GG/AA/YYYY" biçiminde olmalı.');
+
+            const nextSira = inventory.reduce((max, item) => Math.max(max, Number(item.sira) || 0), -1) + 1;
+            const item = {
+                id, ad, mkys, kalan, eksik, fazla,
+                rafSkt,
+                skt,
+                sktGecenMiktar,
+                sktGecenTarih,
+                aciklama,
+                ortu: '',
+                sira: nextSira
+            };
+
+            inventory.push(item);
+            renderTable();
+            populateSelects();
+            markDirty(id);
+            saveLocalCache();
+            updateStats();
+
+            resultEl.className = 'alert alert-success';
+            resultEl.textContent = `✅ "${ad}" eklendi.`;
+            resultEl.classList.remove('d-none');
+            closeAddItemModal();
+            showAlert(`✅ "${ad}" listeye eklendi.`, 'success');
+        }
+
+        function findItem(id) {
+            return inventory.find(item => String(item.id) === String(id));
+        }
+
+        function getKullanilabilirMiktar(item) {
+            return item.fazla > 0 ? item.fazla : item.kalan;
+        }
+
+        function malzemeKullan(item, miktar) {
+            let changed = false;
+            if (item.fazla >= miktar) {
+                item.fazla -= miktar;
+                changed = true;
+            } else if (item.fazla > 0) {
+                const kalanFazla = miktar - item.fazla;
+                item.fazla = 0;
+                item.kalan -= kalanFazla;
+                if (item.kalan < 0) item.kalan = 0;
+                changed = true;
+            } else if (item.kalan >= miktar) {
+                item.kalan -= miktar;
+                if (item.kalan < 0) item.kalan = 0;
+                changed = true;
+            }
+            if (changed) markDirty(item.id);
+            return changed;
+        }
+
+        window.setFilter = function(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-buttons .btn').forEach(b => b.classList.remove('btn-active'));
+            document.querySelector(`.filter-buttons .btn[data-filter="${filter}"]`)?.classList.add('btn-active');
+            renderTable();
+        };
+
+        window.exportFilteredList = function() {
+            const filtered = getViewRows();
+            if (filtered.length === 0) {
+                showAlert('⚠️ Dışa aktarılacak veri yok.', 'warning');
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                showAlert('⚠️ XLSX kütüphanesi yüklenmedi.', 'warning');
+                return;
+            }
+            const exportData = filtered.map(item => ({
+                'MALZEME ID': item.id,
+                'MALZEME ADI': item.ad,
+                'MKYS MALZEME KODU': item.mkys || '',
+                'KALAN MİKTAR': item.kalan,
+                'EKSİK': item.eksik,
+                'FAZLA': item.fazla,
+                'RAF SKT': item.rafSkt || '',
+                'SKT': formatDateDisplay(item.skt),
+                'SKT GEÇEN MİKTAR': item.sktGecenMiktar || 0,
+                'SKT GEÇEN TARİH': formatDateDisplay(item.sktGecenTarih),
+                'AÇIKLAMA': item.aciklama || '',
+                'Durum': item.eksik > 0 ? 'Eksik' : (item.fazla > 0 ? 'Fazla' : 'Normal')
+            }));
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Liste');
+            const filterName = currentFilter === 'all' ? 'Tumu' : currentFilter;
+            const fileName = `Stok_Listesi_${filterName}_${new Date().toISOString().slice(0,10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showAlert(`✅ ${formatNumber(filtered.length)} kayıt dışa aktarıldı.`, 'success');
+        };
+
+        window.exportMainListPDF = function() {
+            const filtered = getViewRows();
+            if (filtered.length === 0) {
+                showAlert('⚠️ Dışa aktarılacak veri yok.', 'warning');
+                return;
+            }
+            const pdf = createPdfDoc();
+            if (!pdf) return;
+            const doc = pdf.doc;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const fontName = pdf.fontName;
+
+            const filterName = currentFilter === 'all' ? 'Tümü' : currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1);
+            doc.setFont(fontName, 'bold');
+            doc.setFontSize(16);
+            doc.text(`Stok Listesi (${filterName})`, pageWidth / 2, 15, { align: 'center' });
+
+            doc.setFont(fontName, 'normal');
+            doc.setFontSize(10);
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR');
+            doc.text(`Tarih: ${dateStr}`, pageWidth / 2, 22, { align: 'center' });
+
+            const tableData = filtered.map(item => {
+                let durum = 'Normal';
+                if (item.eksik > 0) durum = `Eksik (${formatNumber(item.eksik)})`;
+                else if (item.fazla > 0) durum = `Fazla (${formatNumber(item.fazla)})`;
+                return [
+                    item.id,
+                    item.ad,
+                    formatNumber(item.kalan),
+                    formatNumber(item.eksik),
+                    formatNumber(item.fazla),
+                    item.rafSkt || '-',
+                    durum
+                ];
+            });
+
+            doc.autoTable({
+                startY: 30,
+                head: [['ID', 'Malzeme Adı', 'Kalan', 'Eksik', 'Fazla', 'RAF SKT', 'Durum']],
+                body: tableData,
+                styles: { font: fontName, fontStyle: 'normal', fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+                headStyles: { font: fontName, fontStyle: 'bold', fillColor: [52, 73, 94], textColor: [255, 255, 255], fontSize: 8, halign: 'center' },
+                columnStyles: {
+                    0: { cellWidth: 25, halign: 'center' },
+                    1: { cellWidth: 60 },
+                    2: { cellWidth: 20, halign: 'right' },
+                    3: { cellWidth: 20, halign: 'right' },
+                    4: { cellWidth: 20, halign: 'right' },
+                    5: { cellWidth: 20, halign: 'center' },
+                    6: { cellWidth: 30, halign: 'center' }
+                },
+                margin: { left: 10, right: 10 }
+            });
+
+            const fileName = `Stok_Listesi_${filterName}_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`;
+            doc.save(fileName);
+            showAlert(`✅ ${filtered.length} kayıt PDF olarak dışa aktarıldı.`, 'success');
+        };
+
+        // ============================================================
+        //  PDF FONT (TÜRKÇE KARAKTER DESTEĞİ)
+        // ============================================================
+        let pdfFontWarned = false;
+
+        function createPdfDoc() {
+            if (typeof window.jspdf === 'undefined') {
+                showAlert('⚠️ PDF kütüphanesi yüklenmedi.', 'warning');
+                return null;
+            }
+            const doc = new window.jspdf.jsPDF('p', 'mm', 'a4');
+            const family = 'Roboto';
+
+            try {
+                if (window.PDF_FONT_REGULAR) {
+                    doc.addFileToVFS('Roboto-Regular.ttf', window.PDF_FONT_REGULAR);
+                    doc.addFont('Roboto-Regular.ttf', family, 'normal');
+                    if (window.PDF_FONT_BOLD) {
+                        doc.addFileToVFS('Roboto-Medium.ttf', window.PDF_FONT_BOLD);
+                        doc.addFont('Roboto-Medium.ttf', family, 'bold');
+                    } else {
+                        doc.addFont('Roboto-Regular.ttf', family, 'bold');
+                    }
+                    doc.setFont(family, 'normal');
+                    return { doc, fontName: family, unicode: true };
+                }
+            } catch (err) {
+                console.error('PDF font yüklenemedi:', err);
+            }
+
+            if (!pdfFontWarned) {
+                pdfFontWarned = true;
+                showAlert('⚠️ pdf-font.js yüklenemedi. PDF\'te Türkçe karakterler bozuk görünebilir.', 'warning');
+            }
+            doc.setFont('helvetica', 'normal');
+            return { doc, fontName: 'helvetica', unicode: false };
+        }
+
+        window.kullanFazla = function(id, miktar) {
+            const item = findItem(id);
+            if (!item) { showAlert('❌ Ürün bulunamadı.', 'danger'); return; }
+            if (item.fazla < miktar) { showAlert(`❌ Yeterli fazla yok! (${formatNumber(item.fazla)})`, 'danger'); return; }
+            item.fazla -= miktar;
+            markDirty(item.id);
+            renderTable();
+            populateSelects();
+            showAlert(`✅ ${item.ad.substring(0,25)}… ${formatNumber(miktar)} adet kullanıldı.`, 'success');
+            if (item.fazla === 0) showAlert(`⚠️ ${item.ad.substring(0,25)}… fazlası sıfırlandı!`, 'warning');
+        };
+
+        document.getElementById('fazlaKullanBtn').addEventListener('click', function() {
+            const id = document.getElementById('fazlaKullanSelect').value;
+            const miktar = parseInt(document.getElementById('fazlaKullanMiktar').value);
+            const sonucContainer = document.getElementById('fazlaKullanSonuc');
+
+            if (!id) {
+                sonucContainer.className = 'alert alert-warning';
+                sonucContainer.textContent = 'Fazla malzeme seçin.';
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+            if (isNaN(miktar) || miktar < 1) {
+                sonucContainer.className = 'alert alert-warning';
+                sonucContainer.textContent = 'Geçerli miktar girin.';
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+
+            const item = findItem(id);
+            if (!item) {
+                sonucContainer.className = 'alert alert-danger';
+                sonucContainer.textContent = 'Ürün bulunamadı.';
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+            if (item.fazla < miktar) {
+                sonucContainer.className = 'alert alert-danger';
+                sonucContainer.textContent = `Yeterli fazla yok! (${formatNumber(item.fazla)})`;
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+
+            item.fazla -= miktar;
+            markDirty(item.id);
+            renderTable();
+            populateSelects();
+
+            sonucContainer.className = 'alert alert-success';
+            sonucContainer.textContent = `✅ ${item.ad.substring(0,30)}… ${formatNumber(miktar)} adet kullanıldı.`;
+            sonucContainer.classList.remove('d-none');
+            if (item.fazla === 0) {
+                sonucContainer.textContent += ` ⚠️ ${item.ad.substring(0,30)}… sıfırlandı!`;
+            }
+            document.getElementById('fazlaKullanSelect').value = '';
+            document.getElementById('fazlaKullanMiktar').value = 1;
+            setTimeout(() => sonucContainer.classList.add('d-none'), 5000);
+        });
+
+        // ============================================================
+        //  SEARCHABLE DROPDOWN - SADECE FİLTRELEME (HİÇBİR VURGU YOK)
+        // ============================================================
+        class SearchableDropdown {
+            constructor(containerId, options = []) {
+                this.container = document.getElementById(containerId);
+                this.display = this.container.querySelector('.dropdown-display');
+                this.displayText = this.display.querySelector('.display-text');
+                this.searchInput = this.display.querySelector('.dropdown-search-input');
+                this.clearBtn = this.display.querySelector('.display-clear');
+                this.arrow = this.display.querySelector('.display-arrow');
+                this.list = this.container.querySelector('.dropdown-list');
+                this.options = options;
+                this.selectedValue = null;
+                this.selectedLabel = '';
+                this.onChange = null;
+                this.isOpen = false;
+                this.isDisabled = this.container.classList.contains('disabled');
+                this.filteredOptions = [];
+                this.init();
+            }
+
+            init() {
+                this.display.addEventListener('click', (e) => {
+                    if (this.isDisabled) return;
+                    if (e.target === this.clearBtn) return;
+                    if (this.isOpen) {
+                        this.close();
+                    } else {
+                        this.open();
+                    }
+                });
+
+                this.searchInput.addEventListener('input', () => {
+                    this.filter();
+                    this.clearBtn.classList.toggle('show', this.searchInput.value.length > 0);
+                });
+
+                this.searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        const first = this.list.querySelector('.dropdown-item:not(.d-none)');
+                        if (first) {
+                            this.select(first.dataset.value, first.dataset.label);
+                            this.close();
+                        }
+                    }
+                    if (e.key === 'Escape') {
+                        this.close();
+                        this.searchInput.blur();
+                    }
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!this.isOpen) this.open();
+                        const visible = this.list.querySelectorAll('.dropdown-item:not(.d-none)');
+                        if (visible.length > 0) {
+                            visible[0].focus();
+                        }
+                    }
+                });
+
+                this.list.addEventListener('keydown', (e) => {
+                    const items = this.list.querySelectorAll('.dropdown-item:not(.d-none)');
+                    const current = document.activeElement;
+                    let index = Array.from(items).indexOf(current);
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (index < items.length - 1) {
+                            items[index + 1].focus();
+                        }
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (index > 0) {
+                            items[index - 1].focus();
+                        } else {
+                            this.searchInput.focus();
+                        }
+                    } else if (e.key === 'Enter') {
+                        if (current && current.classList.contains('dropdown-item')) {
+                            this.select(current.dataset.value, current.dataset.label);
+                            this.close();
+                        }
+                    } else if (e.key === 'Escape') {
+                        this.close();
+                        this.searchInput.blur();
+                    }
+                });
+
+                this.clearBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.clear();
+                    this.searchInput.focus();
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!this.container.contains(e.target)) {
+                        this.close();
+                    }
+                });
+
+                this.render();
+            }
+
+            setOptions(options) {
+                this.options = options;
+                this.render();
+                this.clear();
+            }
+
+            render() {
+                this.list.innerHTML = '';
+                if (this.options.length === 0) {
+                    this.list.innerHTML = '<div class="dropdown-empty">📭 Kayıt bulunamadı</div>';
+                    return;
+                }
+
+                this.options.forEach(opt => {
+                    const div = document.createElement('div');
+                    div.className = 'dropdown-item';
+                    div.dataset.value = opt.value;
+                    div.dataset.label = opt.label;
+                    div.dataset.search = (opt.search || opt.label).toLowerCase();
+                    div.tabIndex = 0;
+
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'item-label';
+                    labelSpan.textContent = opt.label;
+                    div.appendChild(labelSpan);
+
+                    if (opt.tag) {
+                        const tag = document.createElement('span');
+                        tag.className = `tag ${opt.tagClass || ''}`;
+                        tag.textContent = opt.tag;
+                        div.appendChild(tag);
+                    }
+
+                    div.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        this.select(opt.value, opt.label);
+                        this.close();
+                    });
+
+                    this.list.appendChild(div);
+                });
+
+                this.list.querySelectorAll('.dropdown-item').forEach(item => {
+                    item.classList.remove('d-none');
+                });
+            }
+
+            // SADECE FİLTRELEME - HİÇBİR VURGU YOK
+            filter() {
+                const search = this.searchInput.value.toLowerCase().trim();
+                const items = this.list.querySelectorAll('.dropdown-item');
+                let hasVisible = false;
+                let visibleItems = [];
+
+                items.forEach(item => {
+                    const searchText = item.dataset.search || '';
+                    const label = item.dataset.label.toLowerCase();
+
+                    if (search === '' || searchText.includes(search) || label.includes(search)) {
+                        item.classList.remove('d-none');
+                        hasVisible = true;
+                        visibleItems.push(item);
+                    } else {
+                        item.classList.add('d-none');
+                    }
+                });
+
+                let counter = this.list.querySelector('.dropdown-counter');
+                if (hasVisible && visibleItems.length > 0) {
+                    if (!counter) {
+                        counter = document.createElement('div');
+                        counter.className = 'dropdown-counter';
+                        this.list.appendChild(counter);
+                    }
+                    counter.textContent = `${visibleItems.length} kayıt gösteriliyor`;
+                    counter.style.display = 'block';
+                } else if (counter) {
+                    counter.style.display = 'none';
+                }
+
+                let empty = this.list.querySelector('.dropdown-empty');
+                if (!hasVisible) {
+                    if (!empty) {
+                        empty = document.createElement('div');
+                        empty.className = 'dropdown-empty';
+                        empty.textContent = '🔍 Sonuç bulunamadı';
+                        this.list.appendChild(empty);
+                    }
+                    empty.style.display = 'block';
+                } else if (empty) {
+                    empty.style.display = 'none';
+                }
+            }
+
+            open() {
+                if (this.isDisabled) return;
+                this.isOpen = true;
+                this.container.classList.add('open');
+                this.list.classList.add('show');
+                setTimeout(() => {
+                    this.searchInput.focus();
+                    this.searchInput.select();
+                }, 50);
+                this.displayText.style.display = 'none';
+                this.searchInput.style.display = 'block';
+                this.filter();
+            }
+
+            close() {
+                this.isOpen = false;
+                this.container.classList.remove('open');
+                this.list.classList.remove('show');
+                this.displayText.style.display = 'block';
+                this.searchInput.style.display = 'none';
+                if (!this.selectedValue) {
+                    this.displayText.textContent = this.displayText.dataset.placeholder || '-- Seçiniz --';
+                    this.displayText.classList.add('placeholder');
+                }
+                this.clearBtn.classList.remove('show');
+                this.searchInput.value = '';
+                this.list.querySelectorAll('.dropdown-item').forEach(item => {
+                    item.classList.remove('d-none');
+                });
+            }
+
+            select(value, label) {
+                this.selectedValue = value;
+                this.selectedLabel = label;
+                this.displayText.textContent = label;
+                this.displayText.classList.remove('placeholder');
+                this.clearBtn.classList.add('show');
+                this.close();
+
+                if (this.onChange) {
+                    this.onChange(value, label);
+                }
+
+                this.list.querySelectorAll('.dropdown-item').forEach(item => {
+                    item.classList.toggle('selected', item.dataset.value === value);
+                });
+            }
+
+            getValue() { return this.selectedValue; }
+
+            setValue(value) {
+                const item = this.list.querySelector(`.dropdown-item[data-value="${value}"]`);
+                if (item) {
+                    this.select(value, item.dataset.label);
+                }
+            }
+
+            clear() {
+                this.selectedValue = null;
+                this.selectedLabel = '';
+                this.displayText.textContent = this.displayText.dataset.placeholder || '-- Seçiniz --';
+                this.displayText.classList.add('placeholder');
+                this.clearBtn.classList.remove('show');
+                this.searchInput.value = '';
+                this.list.querySelectorAll('.dropdown-item').forEach(item => {
+                    item.classList.remove('selected');
+                    item.classList.remove('d-none');
+                });
+                if (this.isDisabled) {
+                    this.displayText.textContent = 'Önce eksik seçin';
+                }
+            }
+
+            enable() {
+                this.isDisabled = false;
+                this.container.classList.remove('disabled');
+                this.displayText.dataset.placeholder = '-- Seçiniz --';
+                if (!this.selectedValue) {
+                    this.displayText.textContent = '-- Seçiniz --';
+                    this.displayText.classList.add('placeholder');
+                }
+            }
+
+            disable() {
+                this.isDisabled = true;
+                this.container.classList.add('disabled');
+                this.displayText.dataset.placeholder = 'Önce eksik seçin';
+                this.clear();
+                this.displayText.textContent = 'Önce eksik seçin';
+                this.displayText.classList.add('placeholder');
+            }
+
+            setPlaceholder(text) {
+                this.displayText.dataset.placeholder = text;
+                if (!this.selectedValue) {
+                    this.displayText.textContent = text;
+                    this.displayText.classList.add('placeholder');
+                }
+            }
+        }
+
+        // ============================================================
+        //  DROPDOWN DEĞİŞKENLERİ
+        // ============================================================
+        let eksikDropdown = null;
+        let kaynakDropdown = null;
+
+        function initDropdowns() {
+            eksikDropdown = new SearchableDropdown('eksikDropdown', []);
+            eksikDropdown.onChange = function(value, label) {
+                onEksikSelected(value);
+            };
+            eksikDropdown.setPlaceholder('-- Seçiniz --');
+
+            kaynakDropdown = new SearchableDropdown('kaynakDropdown', []);
+            kaynakDropdown.onChange = function(value, label) {
+                onKaynakSelected(value);
+            };
+            kaynakDropdown.setPlaceholder('Önce eksik seçin');
+            kaynakDropdown.disable();
+        }
+
+        function onEksikSelected(value) {
+            const item = findItem(value);
+            if (item) {
+                document.getElementById('eksikDetail').classList.remove('d-none');
+                document.getElementById('eksikAdi').textContent = item.ad;
+                document.getElementById('eksikMiktar').textContent = formatNumber(item.eksik);
+
+                updateKaynakDropdown(value);
+                kaynakDropdown.enable();
+                kaynakDropdown.setPlaceholder('Kaynak malzeme ara...');
+                document.getElementById('kapatSonuc').classList.add('d-none');
+            } else {
+                document.getElementById('eksikDetail').classList.add('d-none');
+                kaynakDropdown.disable();
+                kaynakDropdown.setPlaceholder('Önce eksik seçin');
+                kaynakDropdown.setOptions([]);
+            }
+        }
+
+        function updateKaynakDropdown(eksikId) {
+            const digerItems = inventory.filter(i => String(i.id) !== String(eksikId));
+            const options = digerItems.map(i => {
+                const mevcut = i.fazla > 0 ? i.fazla : i.kalan;
+                return {
+                    value: i.id,
+                    label: `${i.id} - ${i.ad}`,
+                    search: `${i.id} ${i.ad}`,
+                    tag: i.fazla > 0 ? `Fazla: ${formatNumber(i.fazla)}` : `Kalan: ${formatNumber(i.kalan)}`,
+                    tagClass: i.fazla > 0 ? 'fazla' : 'normal'
+                };
+            });
+
+            kaynakDropdown.setOptions(options);
+            kaynakDropdown.clear();
+        }
+
+        function onKaynakSelected(value) {
+            const item = findItem(value);
+            if (item) {
+                document.getElementById('fazlaDetail').classList.remove('d-none');
+                document.getElementById('fazlaAdi').textContent = item.ad;
+                const mevcut = item.fazla > 0 ? item.fazla : item.kalan;
+                document.getElementById('fazlaMiktar').textContent = formatNumber(mevcut);
+                document.getElementById('kapatMiktar').max = mevcut;
+                document.getElementById('kapatMiktar').value = Math.min(1, mevcut);
+                document.getElementById('kapatSonuc').classList.add('d-none');
+            } else {
+                document.getElementById('fazlaDetail').classList.add('d-none');
+            }
+        }
+
+        function populateSelects() {
+            const eksikItems = inventory.filter(item => item.eksik > 0);
+            const fazlaItems = inventory.filter(item => item.fazla > 0);
+
+            if (eksikDropdown) {
+                const options = eksikItems.map(item => ({
+                    value: item.id,
+                    label: `${item.id} - ${item.ad}`,
+                    search: `${item.id} ${item.ad} ${item.eksik}`,
+                    tag: `Eksik: ${formatNumber(item.eksik)}`,
+                    tagClass: 'eksik'
+                }));
+                eksikDropdown.setOptions(options);
+                eksikDropdown.clear();
+                eksikDropdown.setPlaceholder('-- Seçiniz --');
+            }
+
+            if (kaynakDropdown) {
+                kaynakDropdown.setOptions([]);
+                kaynakDropdown.clear();
+                kaynakDropdown.disable();
+                kaynakDropdown.setPlaceholder('Önce eksik seçin');
+            }
+
+            const fazlaKullanSelect = document.getElementById('fazlaKullanSelect');
+            fazlaKullanSelect.innerHTML = '<option value="">-- Seçin --</option>';
+            if (fazlaItems.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '-- Fazla ürün yok --';
+                fazlaKullanSelect.appendChild(opt);
+            } else {
+                fazlaItems.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item.id;
+                    opt.textContent = `${item.id} - ${item.ad} (Fazla: ${formatNumber(item.fazla)})`;
+                    fazlaKullanSelect.appendChild(opt);
+                });
+            }
+
+            populateModalSelects();
+            populateMultiFazlaKullanSelect();
+        }
+
+        document.getElementById('kapatBtn').addEventListener('click', function() {
+            const eksikId = eksikDropdown ? eksikDropdown.getValue() : null;
+            const kaynakId = kaynakDropdown ? kaynakDropdown.getValue() : null;
+            const miktar = parseInt(document.getElementById('kapatMiktar').value);
+            const sonucContainer = document.getElementById('kapatSonuc');
+
+            if (!eksikId || !kaynakId) {
+                sonucContainer.className = 'alert alert-warning';
+                sonucContainer.textContent = 'Eksik ve kaynak malzeme seçin.';
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+            if (isNaN(miktar) || miktar < 1) {
+                sonucContainer.className = 'alert alert-warning';
+                sonucContainer.textContent = 'Geçerli miktar girin.';
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+
+            const eksikItem = findItem(eksikId);
+            const kaynakItem = findItem(kaynakId);
+
+            if (!eksikItem || !kaynakItem) {
+                sonucContainer.className = 'alert alert-danger';
+                sonucContainer.textContent = 'Ürün bulunamadı.';
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+
+            const mevcut = kaynakItem.fazla > 0 ? kaynakItem.fazla : kaynakItem.kalan;
+            if (mevcut < miktar) {
+                sonucContainer.className = 'alert alert-danger';
+                sonucContainer.textContent = `Yeterli miktar yok! (${formatNumber(mevcut)})`;
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+            if (eksikItem.eksik < miktar) {
+                sonucContainer.className = 'alert alert-warning';
+                sonucContainer.textContent = `Eksik miktarı aşıyor (${formatNumber(eksikItem.eksik)})`;
+                sonucContainer.classList.remove('d-none');
+                setTimeout(() => sonucContainer.classList.add('d-none'), 4000);
+                return;
+            }
+
+            if (kaynakItem.fazla >= miktar) {
+                kaynakItem.fazla -= miktar;
+            } else {
+                const kalanFazla = miktar - kaynakItem.fazla;
+                if (kaynakItem.fazla > 0) kaynakItem.fazla = 0;
+                kaynakItem.kalan -= kalanFazla;
+                if (kaynakItem.kalan < 0) kaynakItem.kalan = 0;
+            }
+
+            eksikItem.eksik -= miktar;
+            markDirty([eksikItem.id, kaynakItem.id]);
+
+            let msg = `✅ ${eksikItem.ad.substring(0,30)}… ${formatNumber(miktar)} adet kapatıldı.`;
+            msg += ` (Kaynak: ${kaynakItem.ad.substring(0,20)}…)`;
+            if (eksikItem.eksik === 0) msg += ' 🎉 Tüm eksiği kapandı!';
+            if (kaynakItem.fazla === 0 && kaynakItem.kalan === 0) msg += ` ⚠️ ${kaynakItem.ad.substring(0,20)}… tükendi!`;
+
+            sonucContainer.className = 'alert alert-success';
+            sonucContainer.textContent = msg;
+            sonucContainer.classList.remove('d-none');
+            renderTable();
+            populateSelects();
+
+            if (eksikDropdown) {
+                eksikDropdown.clear();
+                eksikDropdown.setPlaceholder('-- Seçiniz --');
+            }
+            if (kaynakDropdown) {
+                kaynakDropdown.clear();
+                kaynakDropdown.disable();
+                kaynakDropdown.setPlaceholder('Önce eksik seçin');
+            }
+            document.getElementById('eksikDetail').classList.add('d-none');
+            document.getElementById('fazlaDetail').classList.add('d-none');
+            document.getElementById('kapatMiktar').value = 1;
+            setTimeout(() => sonucContainer.classList.add('d-none'), 5000);
+        });
+
+        // ============================================================
+        //  ÇOKLU EKSİK KAPATMA MODALI (KISALTILDI)
+        // ============================================================
+        function openMultiUseModal() {
+            document.getElementById('multiUseModal').classList.add('active');
+            populateModalSelects();
+            renderMultiItems();
+            updateEksikInfo();
+            document.getElementById('multiEksikSelect').value = '';
+            document.getElementById('multiEksikInfo').classList.add('d-none');
+            document.getElementById('multiSonuc').classList.add('d-none');
+            multiItems = [];
+            renderMultiItems();
+        }
+
+        function closeMultiUseModal() {
+            document.getElementById('multiUseModal').classList.remove('active');
+        }
+
+        function populateModalSelects() {
+            const eksikItems = inventory.filter(item => item.eksik > 0);
+            const kaynakItems = inventory.filter(item => item.kalan > 0 || item.fazla > 0);
+
+            const multiEksikSelect = document.getElementById('multiEksikSelect');
+            multiEksikSelect.innerHTML = '<option value="">-- Eksik malzeme seçin --</option>';
+            eksikItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.id} - ${item.ad} (Eksik: ${formatNumber(item.eksik)})`;
+                multiEksikSelect.appendChild(opt);
+            });
+
+            const multiFazlaSelect = document.getElementById('multiFazlaSelect');
+            multiFazlaSelect.innerHTML = '<option value="">-- Kaynak malzeme seçin --</option>';
+            kaynakItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                const mevcut = item.fazla > 0 ? `Fazla: ${formatNumber(item.fazla)}` : `Kalan: ${formatNumber(item.kalan)}`;
+                opt.textContent = `${item.id} - ${item.ad} (${mevcut})`;
+                multiFazlaSelect.appendChild(opt);
+            });
+        }
+
+        document.getElementById('multiEksikSelect').addEventListener('change', function() {
+            selectedEksikId = this.value;
+            updateEksikInfo();
+            multiItems = [];
+            renderMultiItems();
+            populateMultiFazlaSelect();
+        });
+
+        function populateMultiFazlaSelect() {
+            const kaynakItems = inventory.filter(item => 
+                (item.kalan > 0 || item.fazla > 0) && 
+                String(item.id) !== String(selectedEksikId)
+            );
+            const select = document.getElementById('multiFazlaSelect');
+            select.innerHTML = '<option value="">-- Kaynak malzeme seçin --</option>';
+            kaynakItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                const mevcut = item.fazla > 0 ? `Fazla: ${formatNumber(item.fazla)}` : `Kalan: ${formatNumber(item.kalan)}`;
+                opt.textContent = `${item.id} - ${item.ad} (${mevcut})`;
+                select.appendChild(opt);
+            });
+        }
+
+        function updateEksikInfo() {
+            const item = findItem(selectedEksikId);
+            const infoBox = document.getElementById('multiEksikInfo');
+            if (item && item.eksik > 0) {
+                infoBox.classList.remove('d-none');
+                document.getElementById('multiEksikAdi').textContent = item.ad;
+                document.getElementById('multiEksikMiktar').textContent = formatNumber(item.eksik);
+
+                const totalAdded = multiItems.reduce((sum, i) => sum + i.miktar, 0);
+                const progress = Math.min(100, (totalAdded / item.eksik) * 100);
+                document.getElementById('multiProgressFill').style.width = progress + '%';
+                document.getElementById('multiProgressText').textContent =
+                    `${formatNumber(totalAdded)} / ${formatNumber(item.eksik)} kapatıldı (${Math.round(progress)}%)`;
+
+                if (totalAdded >= item.eksik) {
+                    document.getElementById('multiProgressFill').style.background = '#28a745';
+                } else {
+                    document.getElementById('multiProgressFill').style.background = '#ffc107';
+                }
+            } else {
+                infoBox.classList.add('d-none');
+            }
+        }
+
+        function addMultiItem() {
+            const select = document.getElementById('multiFazlaSelect');
+            const miktar = parseInt(document.getElementById('multiFazlaMiktar').value);
+            const id = select.value;
+
+            if (!selectedEksikId) {
+                showAlert('⚠️ Lütfen önce bir eksik malzeme seçin.', 'warning');
+                return;
+            }
+            if (!id) { showAlert('⚠️ Lütfen bir kaynak malzeme seçin.', 'warning'); return; }
+            if (isNaN(miktar) || miktar < 1) { showAlert('⚠️ Geçerli bir miktar girin.', 'warning'); return; }
+
+            const eksikItem = findItem(selectedEksikId);
+            if (!eksikItem) { showAlert('❌ Eksik ürün bulunamadı.', 'danger'); return; }
+
+            const item = findItem(id);
+            if (!item) { showAlert('❌ Kaynak ürün bulunamadı.', 'danger'); return; }
+
+            const mevcut = item.fazla > 0 ? item.fazla : item.kalan;
+            if (mevcut < miktar) { showAlert(`❌ Yeterli miktar yok! (${formatNumber(mevcut)})`, 'danger'); return; }
+
+            const currentTotal = multiItems.reduce((sum, i) => sum + i.miktar, 0);
+            if (currentTotal + miktar > eksikItem.eksik) {
+                showAlert(`⚠️ Eksik miktarını aşıyorsunuz! Kalan eksik: ${formatNumber(eksikItem.eksik - currentTotal)}`, 'warning');
+                return;
+            }
+
+            const existing = multiItems.find(i => i.id === id);
+            if (existing) {
+                if (existing.miktar + miktar > mevcut) {
+                    showAlert(`❌ Toplam miktar aşılıyor! (Mevcut: ${formatNumber(mevcut)})`, 'danger');
+                    return;
+                }
+                existing.miktar += miktar;
+            } else {
+                multiItems.push({ id: id, ad: item.ad, miktar: miktar, max: mevcut, isFazla: item.fazla > 0 });
+            }
+
+            renderMultiItems();
+            updateEksikInfo();
+            document.getElementById('multiFazlaMiktar').value = 1;
+            select.value = '';
+            showAlert(`✅ ${item.ad.substring(0,30)}… ${formatNumber(miktar)} adet eklendi.`, 'success');
+        }
+
+        function removeMultiItem(index) {
+            multiItems.splice(index, 1);
+            renderMultiItems();
+            updateEksikInfo();
+        }
+
+        function clearMultiItems() {
+            multiItems = [];
+            renderMultiItems();
+            updateEksikInfo();
+            showAlert('🗑️ Liste temizlendi.', 'info');
+        }
+
+        function renderMultiItems() {
+            const container = document.getElementById('selectedItemsList');
+            if (multiItems.length === 0) {
+                container.innerHTML = '<div class="text-muted" style="text-align:center; padding:20px;">Henüz kaynak malzeme eklenmemiş</div>';
+                return;
+            }
+
+            let html = '';
+            let total = 0;
+            multiItems.forEach((item, index) => {
+                total += item.miktar;
+                const tip = item.isFazla ? '🔥 Fazla' : '📦 Kalan';
+                html += `
+                    <div class="item-row">
+                        <span class="info">${item.id} - ${item.ad} <span class="text-muted">(${tip})</span></span>
+                        <span class="qty">${formatNumber(item.miktar)}</span>
+                        <button class="btn-remove-item" onclick="removeMultiItem(${index})">✕</button>
+                    </div>
+                `;
+            });
+            const eksikItem = findItem(selectedEksikId);
+            const kalan = eksikItem ? eksikItem.eksik - total : 0;
+            html += `<div style="display:flex; justify-content:space-between; padding:6px 8px; border-top:2px solid #e9ecef; font-weight:600;">
+                <span>Toplam: ${formatNumber(total)}</span>
+                <span style="color:${kalan > 0 ? '#e74c3c' : '#28a745'}">Kalan Eksik: ${formatNumber(kalan)}</span>
+            </div>`;
+            container.innerHTML = html;
+        }
+
+        function applyMultiUse() {
+            if (!selectedEksikId) {
+                showAlert('⚠️ Lütfen bir eksik malzeme seçin.', 'warning');
+                return;
+            }
+            if (multiItems.length === 0) {
+                showAlert('⚠️ Uygulanacak kaynak malzeme yok.', 'warning');
+                return;
+            }
+
+            const eksikItem = findItem(selectedEksikId);
+            if (!eksikItem) {
+                showAlert('❌ Eksik ürün bulunamadı.', 'danger');
+                return;
+            }
+
+            const totalAdded = multiItems.reduce((sum, i) => sum + i.miktar, 0);
+            if (totalAdded > eksikItem.eksik) {
+                showAlert(`⚠️ Eksik miktarını aşıyorsunuz! (Eksik: ${formatNumber(eksikItem.eksik)})`, 'warning');
+                return;
+            }
+
+            let errors = [];
+            let canApply = true;
+            multiItems.forEach(item => {
+                const stockItem = findItem(item.id);
+                if (!stockItem) {
+                    errors.push(`${item.id} - ${item.ad}: Ürün bulunamadı`);
+                    canApply = false;
+                    return;
+                }
+                const mevcut = stockItem.fazla > 0 ? stockItem.fazla : stockItem.kalan;
+                if (mevcut < item.miktar) {
+                    errors.push(`${item.id} - ${item.ad}: Yeterli miktar yok (Mevcut: ${formatNumber(mevcut)})`);
+                    canApply = false;
+                }
+            });
+
+            if (!canApply) {
+                const sonuc = document.getElementById('multiSonuc');
+                sonuc.className = 'alert alert-danger';
+                sonuc.textContent = '❌ Hatalar: ' + errors.join('; ');
+                sonuc.classList.remove('d-none');
+                setTimeout(() => sonuc.classList.add('d-none'), 8000);
+                return;
+            }
+
+            let success = [];
+            multiItems.forEach(item => {
+                const stockItem = findItem(item.id);
+                if (stockItem.fazla >= item.miktar) {
+                    stockItem.fazla -= item.miktar;
+                } else {
+                    const kalanFazla = item.miktar - stockItem.fazla;
+                    if (stockItem.fazla > 0) stockItem.fazla = 0;
+                    stockItem.kalan -= kalanFazla;
+                    if (stockItem.kalan < 0) stockItem.kalan = 0;
+                }
+                success.push(`${item.id} - ${item.ad}: ${formatNumber(item.miktar)} adet`);
+            });
+
+            eksikItem.eksik -= totalAdded;
+            markDirty([eksikItem.id, ...multiItems.map(item => item.id)]);
+
+            const sonuc = document.getElementById('multiSonuc');
+            let msg = `✅ ${eksikItem.ad} ürününün ${formatNumber(totalAdded)} adet eksiği kapatıldı.\n`;
+            msg += `📦 Kullanılan kaynaklar: ${success.join('; ')}`;
+            if (eksikItem.eksik === 0) msg += '\n🎉 Tüm eksiği kapandı!';
+
+            sonuc.className = 'alert alert-success';
+            sonuc.textContent = msg;
+            sonuc.classList.remove('d-none');
+
+            renderTable();
+            populateSelects();
+            populateModalSelects();
+
+            multiItems = [];
+            renderMultiItems();
+            updateEksikInfo();
+
+            setTimeout(() => sonuc.classList.add('d-none'), 10000);
+        }
+
+        function exportMultiExcel() {
+            if (multiItems.length === 0) {
+                showAlert('⚠️ Dışa aktarılacak veri yok.', 'warning');
+                return;
+            }
+
+            const eksikItem = findItem(selectedEksikId);
+            const data = multiItems.map(item => ({
+                'Eksik Malzeme': eksikItem ? eksikItem.ad : '-',
+                'Eksik Miktar': eksikItem ? eksikItem.eksik : 0,
+                'Kaynak ID': item.id,
+                'Kaynak Adı': item.ad,
+                'Kullanılan Miktar': item.miktar
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'EksikKapatma');
+            XLSX.writeFile(wb, `Eksik_Kapatma_${new Date().toISOString().slice(0,10)}.xlsx`);
+            showAlert(`✅ ${multiItems.length} kayıt Excel olarak dışa aktarıldı.`, 'success');
+        }
+
+        function exportMultiPDF() {
+            if (multiItems.length === 0) {
+                showAlert('⚠️ Dışa aktarılacak veri yok.', 'warning');
+                return;
+            }
+
+            const pdf = createPdfDoc();
+            if (!pdf) return;
+            const doc = pdf.doc;
+            const fontName = pdf.fontName;
+
+            const eksikItem = findItem(selectedEksikId);
+            const pageWidth = doc.internal.pageSize.getWidth();
+
+            doc.setFont(fontName, 'bold');
+            doc.setFontSize(16);
+            doc.text('Eksik Kapatma - Kaynak Malzeme Kullanım Listesi', pageWidth / 2, 15, { align: 'center' });
+            doc.setFont(fontName, 'normal');
+            doc.setFontSize(10);
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR');
+            doc.text(`Tarih: ${dateStr}`, pageWidth / 2, 22, { align: 'center' });
+
+            if (eksikItem) {
+                doc.setFontSize(12);
+                doc.text(`Eksik Malzeme: ${eksikItem.ad} (Eksik: ${formatNumber(eksikItem.eksik)})`, 14, 32);
+            }
+
+            const tableData = multiItems.map(item => [
+                item.id,
+                item.ad,
+                formatNumber(item.miktar)
+            ]);
+
+            doc.autoTable({
+                startY: 40,
+                head: [['ID', 'Kaynak Malzeme Adı', 'Kullanılan Miktar']],
+                body: tableData,
+                foot: [['', 'Toplam', formatNumber(multiItems.reduce((s, i) => s + i.miktar, 0))]],
+                styles: { font: fontName, fontStyle: 'normal', fontSize: 8, cellPadding: 2 },
+                headStyles: { font: fontName, fontStyle: 'bold', fillColor: [52, 73, 94], textColor: [255, 255, 255] },
+                footStyles: { font: fontName, fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [0, 0, 0] },
+                columnStyles: {
+                    0: { cellWidth: 30 },
+                    1: { cellWidth: 118 },
+                    2: { cellWidth: 34, halign: 'right' }
+                },
+                margin: { left: 14, right: 14 }
+            });
+
+            doc.save(`Eksik_Kapatma_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`);
+            showAlert(`✅ ${multiItems.length} kayıt PDF olarak dışa aktarıldı.`, 'success');
+        }
+
+        // ============================================================
+        //  ÇOKLU FAZLA KULLANIM MODALI (KISALTILDI)
+        // ============================================================
+        function openMultiFazlaKullanModal() {
+            document.getElementById('multiFazlaKullanModal').classList.add('active');
+            populateMultiFazlaKullanSelect();
+            renderMultiFazlaKullanItems();
+            document.getElementById('multiFazlaKullanSonuc').classList.add('d-none');
+            multiFazlaKullanItems = [];
+            renderMultiFazlaKullanItems();
+        }
+
+        function closeMultiFazlaKullanModal() {
+            document.getElementById('multiFazlaKullanModal').classList.remove('active');
+        }
+
+        function populateMultiFazlaKullanSelect() {
+            const fazlaItems = inventory.filter(item => item.fazla > 0);
+            const select = document.getElementById('multiFazlaKullanSelect');
+            select.innerHTML = '<option value="">-- Fazla malzeme seçin --</option>';
+            fazlaItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.id} - ${item.ad} (Fazla: ${formatNumber(item.fazla)})`;
+                select.appendChild(opt);
+            });
+        }
+
+        function addMultiFazlaKullanItem() {
+            const select = document.getElementById('multiFazlaKullanSelect');
+            const miktar = parseInt(document.getElementById('multiFazlaKullanMiktar').value);
+            const id = select.value;
+
+            if (!id) { showAlert('⚠️ Lütfen bir fazla malzeme seçin.', 'warning'); return; }
+            if (isNaN(miktar) || miktar < 1) { showAlert('⚠️ Geçerli bir miktar girin.', 'warning'); return; }
+
+            const item = findItem(id);
+            if (!item) { showAlert('❌ Ürün bulunamadı.', 'danger'); return; }
+            if (item.fazla < miktar) { showAlert(`❌ Yeterli fazla yok! (${formatNumber(item.fazla)})`, 'danger'); return; }
+
+            const existing = multiFazlaKullanItems.find(i => i.id === id);
+            if (existing) {
+                if (existing.miktar + miktar > item.fazla) {
+                    showAlert(`❌ Toplam fazla aşılıyor! (Mevcut: ${formatNumber(item.fazla)})`, 'danger');
+                    return;
+                }
+                existing.miktar += miktar;
+            } else {
+                multiFazlaKullanItems.push({ id: id, ad: item.ad, miktar: miktar, max: item.fazla });
+            }
+
+            renderMultiFazlaKullanItems();
+            document.getElementById('multiFazlaKullanMiktar').value = 1;
+            select.value = '';
+            showAlert(`✅ ${item.ad.substring(0,30)}… ${formatNumber(miktar)} adet eklendi.`, 'success');
+        }
+
+        function removeMultiFazlaKullanItem(index) {
+            multiFazlaKullanItems.splice(index, 1);
+            renderMultiFazlaKullanItems();
+        }
+
+        function clearMultiFazlaKullanItems() {
+            multiFazlaKullanItems = [];
+            renderMultiFazlaKullanItems();
+            showAlert('🗑️ Liste temizlendi.', 'info');
+        }
+
+        function renderMultiFazlaKullanItems() {
+            const container = document.getElementById('selectedFazlaKullanList');
+            if (multiFazlaKullanItems.length === 0) {
+                container.innerHTML = '<div class="text-muted" style="text-align:center; padding:20px;">Henüz malzeme eklenmemiş</div>';
+                return;
+            }
+
+            let html = '';
+            let total = 0;
+            multiFazlaKullanItems.forEach((item, index) => {
+                total += item.miktar;
+                html += `
+                    <div class="item-row">
+                        <span class="info">${item.id} - ${item.ad}</span>
+                        <span class="qty">${formatNumber(item.miktar)}</span>
+                        <button class="btn-remove-item" onclick="removeMultiFazlaKullanItem(${index})">✕</button>
+                    </div>
+                `;
+            });
+            html += `<div style="display:flex; justify-content:space-between; padding:6px 8px; border-top:2px solid #e9ecef; font-weight:600;">
+                <span>Toplam: ${formatNumber(total)}</span>
+            </div>`;
+            container.innerHTML = html;
+        }
+
+        function applyMultiFazlaKullan() {
+            if (multiFazlaKullanItems.length === 0) {
+                showAlert('⚠️ Uygulanacak fazla malzeme yok.', 'warning');
+                return;
+            }
+
+            let errors = [];
+            let canApply = true;
+            multiFazlaKullanItems.forEach(item => {
+                const stockItem = findItem(item.id);
+                if (!stockItem) {
+                    errors.push(`${item.id} - ${item.ad}: Ürün bulunamadı`);
+                    canApply = false;
+                    return;
+                }
+                if (stockItem.fazla < item.miktar) {
+                    errors.push(`${item.id} - ${item.ad}: Yeterli fazla yok (Mevcut: ${formatNumber(stockItem.fazla)})`);
+                    canApply = false;
+                }
+            });
+
+            if (!canApply) {
+                const sonuc = document.getElementById('multiFazlaKullanSonuc');
+                sonuc.className = 'alert alert-danger';
+                sonuc.textContent = '❌ Hatalar: ' + errors.join('; ');
+                sonuc.classList.remove('d-none');
+                setTimeout(() => sonuc.classList.add('d-none'), 8000);
+                return;
+            }
+
+            let success = [];
+            multiFazlaKullanItems.forEach(item => {
+                const stockItem = findItem(item.id);
+                stockItem.fazla -= item.miktar;
+                success.push(`${item.id} - ${item.ad}: ${formatNumber(item.miktar)} adet`);
+            });
+            markDirty(multiFazlaKullanItems.map(item => item.id));
+
+            const sonuc = document.getElementById('multiFazlaKullanSonuc');
+            let msg = `✅ Fazla malzemeler kullanıldı.\n`;
+            msg += `📦 Kullanılanlar: ${success.join('; ')}`;
+
+            sonuc.className = 'alert alert-success';
+            sonuc.textContent = msg;
+            sonuc.classList.remove('d-none');
+
+            renderTable();
+            populateSelects();
+            populateMultiFazlaKullanSelect();
+
+            multiFazlaKullanItems = [];
+            renderMultiFazlaKullanItems();
+
+            setTimeout(() => sonuc.classList.add('d-none'), 10000);
+        }
+
+        function exportMultiFazlaKullanExcel() {
+            if (multiFazlaKullanItems.length === 0) {
+                showAlert('⚠️ Dışa aktarılacak veri yok.', 'warning');
+                return;
+            }
+
+            const data = multiFazlaKullanItems.map(item => ({
+                'Malzeme ID': item.id,
+                'Malzeme Adı': item.ad,
+                'Kullanılan Miktar': item.miktar
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'FazlaKullan');
+            XLSX.writeFile(wb, `Fazla_Kullanimi_${new Date().toISOString().slice(0,10)}.xlsx`);
+            showAlert(`✅ ${multiFazlaKullanItems.length} kayıt Excel olarak dışa aktarıldı.`, 'success');
+        }
+
+        function exportMultiFazlaKullanPDF() {
+            if (multiFazlaKullanItems.length === 0) {
+                showAlert('⚠️ Dışa aktarılacak veri yok.', 'warning');
+                return;
+            }
+
+            const pdf = createPdfDoc();
+            if (!pdf) return;
+            const doc = pdf.doc;
+            const fontName = pdf.fontName;
+            const pageWidth = doc.internal.pageSize.getWidth();
+
+            doc.setFont(fontName, 'bold');
+            doc.setFontSize(16);
+            doc.text('Çoklu Fazla Kullanım Listesi', pageWidth / 2, 15, { align: 'center' });
+            doc.setFont(fontName, 'normal');
+            doc.setFontSize(10);
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR');
+            doc.text(`Tarih: ${dateStr}`, pageWidth / 2, 22, { align: 'center' });
+
+            const tableData = multiFazlaKullanItems.map(item => [
+                item.id,
+                item.ad,
+                formatNumber(item.miktar)
+            ]);
+
+            doc.autoTable({
+                startY: 30,
+                head: [['ID', 'Malzeme Adı', 'Kullanılan Miktar']],
+                body: tableData,
+                foot: [['', 'Toplam', formatNumber(multiFazlaKullanItems.reduce((s, i) => s + i.miktar, 0))]],
+                styles: { font: fontName, fontStyle: 'normal', fontSize: 8, cellPadding: 2 },
+                headStyles: { font: fontName, fontStyle: 'bold', fillColor: [52, 73, 94], textColor: [255, 255, 255] },
+                footStyles: { font: fontName, fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [0, 0, 0] },
+                columnStyles: {
+                    0: { cellWidth: 30 },
+                    1: { cellWidth: 118 },
+                    2: { cellWidth: 34, halign: 'right' }
+                },
+                margin: { left: 14, right: 14 }
+            });
+
+            doc.save(`Fazla_Kullanimi_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`);
+            showAlert(`✅ ${multiFazlaKullanItems.length} kayıt PDF olarak dışa aktarıldı.`, 'success');
+        }
+
+        // ============================================================
+        //  FIREBASE / FIRESTORE VERİ KATMANI
+        // ============================================================
+        const CLOUD_COLLECTION = window.FIREBASE_COLLECTION || 'stok';
+        const CACHE_KEY = 'stokCacheV2';
+        const LEGACY_KEYS = ['stokServiceAccount', 'stokSpreadsheetId', 'stokSheetName', 'stokExcelSavedV1', 'stokDataSource'];
+
+        let db = null;
+        let cloudReady = false;
+        let cloudUnsubscribe = null;
+        let cloudSnapshotSeen = false;
+        let dirtyIds = new Set();
+        let saveTimer = null;
+        let bundledPreviewTried = false;
+        const SEED_KEY = 'stokSeededV1';
+
+        LEGACY_KEYS.forEach(key => {
+            try { localStorage.removeItem(key); } catch (e) { /* yoksay */ }
+        });
+
+        function getFirebaseConfig() {
+            const cfg = window.FIREBASE_CONFIG || window.firebaseConfig || null;
+            if (!cfg || !cfg.apiKey || !cfg.projectId) return null;
+            return cfg;
+        }
+
+        function isFirebaseConfigured() {
+            return getFirebaseConfig() !== null;
+        }
+
+        function setCloudState(mode, message) {
+            const chip = document.getElementById('cloudChip');
+            const meta = document.getElementById('cloudMetaText');
+            const header = document.getElementById('cloudHeaderText');
+            const badge = document.getElementById('syncStatus');
+
+            if (mode === 'connected') {
+                updateConnectionStatus('connected', message);
+                if (badge) { badge.style.background = '#27ae60'; badge.textContent = '☁️ Firebase'; }
+            } else if (mode === 'loading' || mode === 'pending') {
+                updateConnectionStatus('loading', message);
+                if (badge) { badge.style.background = '#e67e22'; badge.textContent = '☁️ Kaydediliyor...'; }
+            } else if (mode === 'local') {
+                updateConnectionStatus('disconnected', message);
+                if (badge) { badge.style.background = '#6c757d'; badge.textContent = '💾 Yerel mod'; }
+            } else {
+                updateConnectionStatus('disconnected', message);
+                if (badge) { badge.style.background = '#dc3545'; badge.textContent = '⚠️ Bağlantı hatası'; }
+            }
+
+            if (chip) chip.textContent = mode === 'local' ? '💾 Yerel' : '☁️ Firestore';
+            if (meta) meta.textContent = message;
+            if (header) header.textContent = mode === 'local' ? 'Yerel mod' : (mode === 'error' ? 'Bağlantı sorunu' : 'Firestore');
+        }
+
+        function initFirebase() {
+            if (!window.firebase) {
+                setCloudState('error', 'Firebase SDK yüklenemedi (internet bağlantısını kontrol edin)');
+                return false;
+            }
+            if (!isFirebaseConfigured()) {
+                setCloudState('local', 'Yerel mod — firebase-config.js doldurulmadı');
+                return false;
+            }
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(getFirebaseConfig());
+                db = firebase.firestore();
+                try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) { /* çoklu sekme */ }
+                cloudReady = true;
+                return true;
+            } catch (err) {
+                console.error('Firebase başlatma hatası:', err);
+                setCloudState('error', 'Firebase başlatılamadı: ' + err.message);
+                return false;
+            }
+        }
+
+        function docIdFor(id) {
+            return String(id).replace(/[\/\\]/g, '_');
+        }
+
+        function toDocDate(value) {
+            if (value instanceof Date && !isNaN(value.getTime())) return value.toISOString();
+            return value || '';
+        }
+
+        function toCellDate(value) {
+            if (!value) return '';
+            if (value instanceof Date && !isNaN(value.getTime())) return value;
+            const text = String(value);
+            if (/^\d{4}-\d{2}-\d{2}T/.test(text)) {
+                const date = new Date(text);
+                if (!isNaN(date.getTime())) return date;
+            }
+            return text;
+        }
+
+        function itemToDoc(item) {
+            return {
+                id: String(item.id),
+                ad: item.ad || '',
+                mkys: item.mkys || '',
+                kalan: Number(item.kalan) || 0,
+                eksik: Number(item.eksik) || 0,
+                fazla: Number(item.fazla) || 0,
+                rafSkt: item.rafSkt || '',
+                skt: toDocDate(item.skt),
+                sktGecenMiktar: Number(item.sktGecenMiktar) || 0,
+                sktGecenTarih: toDocDate(item.sktGecenTarih),
+                aciklama: item.aciklama || '',
+                ortu: item.ortu || '',
+                sira: Number(item.sira) || 0,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+        }
+
+        function normalizeRemote(data) {
+            return {
+                id: String(data.id == null ? '' : data.id),
+                ad: data.ad || '',
+                mkys: data.mkys || '',
+                kalan: toSafeNumber(data.kalan),
+                eksik: toSafeNumber(data.eksik),
+                fazla: toSafeNumber(data.fazla),
+                rafSkt: data.rafSkt || '',
+                skt: toIsoDate(data.skt),
+                sktGecenMiktar: toSafeNumber(data.sktGecenMiktar),
+                sktGecenTarih: toIsoDate(data.sktGecenTarih),
+                aciklama: data.aciklama || '',
+                ortu: data.ortu || '',
+                sira: Number(data.sira) || 0
+            };
+        }
+
+        function sortInventory() {
+            inventory.sort((a, b) => {
+                const sa = Number(a.sira) || 0;
+                const sb = Number(b.sira) || 0;
+                if (sa !== sb) return sa - sb;
+                return String(a.id).localeCompare(String(b.id), 'tr', { numeric: true });
+            });
+            inventory.forEach((item, index) => { item.sira = index; });
+        }
+
+        function startCloudSync() {
+            if (!cloudReady) return;
+            if (cloudUnsubscribe) {
+                try { cloudUnsubscribe(); } catch (e) { /* yoksay */ }
+                cloudUnsubscribe = null;
+            }
+            cloudUnsubscribe = db.collection(CLOUD_COLLECTION).onSnapshot(snapshot => {
+                cloudSnapshotSeen = true;
+                applyRemoteSnapshot(snapshot);
+            }, err => {
+                console.error('Firestore dinleme hatası:', err);
+                setCloudState('error', 'Bağlantı hatası: ' + err.message);
+            });
+        }
+
+        async function applyRemoteSnapshot(snapshot) {
+            const remoteItems = [];
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data && data.id) remoteItems.push(normalizeRemote(data));
+            });
+            remoteItems.sort((a, b) => (Number(a.sira) || 0) - (Number(b.sira) || 0));
+
+            const localById = new Map(inventory.map(item => [String(item.id), item]));
+            const merged = [];
+            let added = 0;
+            let dropped = 0;
+
+            remoteItems.forEach(remoteItem => {
+                if (pendingDeletes.has(remoteItem.id)) return;
+                const local = localById.get(remoteItem.id);
+                if (!local) {
+                    merged.push(remoteItem);
+                    added++;
+                    return;
+                }
+                localById.delete(remoteItem.id);
+                if (!dirtyIds.has(remoteItem.id)) Object.assign(local, remoteItem);
+                merged.push(local);
+            });
+
+            localById.forEach(item => {
+                if (pendingDeletes.has(String(item.id))) { dropped++; return; }
+                if (dirtyIds.has(String(item.id))) merged.push(item);
+                else dropped++;
+            });
+
+            inventory = merged;
+            sortInventory();
+            renderTable();
+            populateSelects();
+            saveLocalCache();
+
+            const total = formatNumber(inventory.length);
+            document.getElementById('lastUpdate').textContent = `Son güncelleme: ${new Date().toLocaleString('tr-TR')}`;
+
+            if (!inventory.length) {
+                setCloudState('connected', 'Bulut bağlı ama liste boş — şablondan yükleyin');
+                if (!bundledPreviewTried) {
+                    bundledPreviewTried = true;
+                    await seedFromBundledTemplate();
+                }
+            } else {
+                setCloudState('connected', `${total} ürün • ${new Date().toLocaleTimeString('tr-TR')}`);
+            }
+
+            if (added || dropped) {
+                console.info(`Bulut senkronu: +${added} yeni, -${dropped} bulutta yok`);
+            }
+        }
+
+        function markDirty(idOrIds) {
+            const list = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+            let marked = 0;
+            list.forEach(id => {
+                if (id != null && id !== '') { dirtyIds.add(String(id)); marked++; }
+            });
+            if (!marked) return;
+            saveLocalCache();
+            if (cloudReady) {
+                setCloudState('pending', 'Kaydediliyor...');
+                scheduleCloudSave();
+            }
+        }
+
+        function scheduleCloudSave() {
+            if (!cloudReady) return;
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => { flushDirtyToCloud(); }, 700);
+        }
+
+        async function writeItemsToCloud(items) {
+            if (!cloudReady || !items.length) return false;
+            const chunkSize = 400;
+            for (let i = 0; i < items.length; i += chunkSize) {
+                const batch = db.batch();
+                items.slice(i, i + chunkSize).forEach(item => {
+                    batch.set(db.collection(CLOUD_COLLECTION).doc(docIdFor(item.id)), itemToDoc(item), { merge: true });
+                });
+                await batch.commit();
+            }
+            return true;
+        }
+
+        async function flushDirtyToCloud() {
+            if (!cloudReady || dirtyIds.size === 0) return;
+            const ids = Array.from(dirtyIds);
+            dirtyIds.clear();
+            const items = ids.map(id => findItem(id)).filter(Boolean);
+            if (!items.length) return;
+            try {
+                await writeItemsToCloud(items);
+                saveLocalCache();
+                setCloudState('connected', `${formatNumber(inventory.length)} ürün • ${new Date().toLocaleTimeString('tr-TR')} kaydedildi`);
+            } catch (err) {
+                ids.forEach(id => dirtyIds.add(id));
+                console.error('Buluta kaydetme hatası:', err);
+                setCloudState('error', 'Kaydetme hatası: ' + err.message);
+                showAlert(`❌ Buluta kaydedilemedi: ${err.message}`, 'danger');
+            }
+        }
+
+        async function writeAllToCloud(showMessages = true) {
+            if (!inventory.length) {
+                showAlert('⚠️ Buluta yazılacak kayıt yok.', 'warning');
+                return false;
+            }
+            if (!cloudReady) {
+                showAlert('❌ Firebase yapılandırılmadı. firebase-config.js dosyasını doldurun.', 'danger');
+                return false;
+            }
+            try {
+                setCloudState('loading', 'Buluta yazılıyor...');
+                await writeItemsToCloud(inventory);
+                dirtyIds.clear();
+                saveLocalCache();
+                setCloudState('connected', `${formatNumber(inventory.length)} ürün buluta yazıldı`);
+                if (showMessages) showAlert(`✅ ${formatNumber(inventory.length)} ürün Firebase'e yazıldı.`, 'success');
+                return true;
+            } catch (err) {
+                console.error('Toplu yazma hatası:', err);
+                setCloudState('error', 'Yazma hatası: ' + err.message);
+                showAlert(`❌ Yazma hatası: ${err.message}`, 'danger');
+                return false;
+            }
+        }
+
+        async function reloadFromCloud() {
+            if (!cloudReady) {
+                showAlert('❌ Firebase yapılandırılmadı. firebase-config.js dosyasını doldurun.', 'danger');
+                return false;
+            }
+            try {
+                setCloudState('loading', 'Buluttan yenileniyor...');
+                const snapshot = await db.collection(CLOUD_COLLECTION).get();
+                applyRemoteSnapshot(snapshot);
+                showAlert(`✅ ${formatNumber(inventory.length)} ürün buluttan yenilendi.`, 'success');
+                return true;
+            } catch (err) {
+                console.error('Yenileme hatası:', err);
+                setCloudState('error', 'Yenileme hatası: ' + err.message);
+                showAlert(`❌ Buluttan yenilenemedi: ${err.message}`, 'danger');
+                return false;
+            }
+        }
+
+        function saveLocalCache() {
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify({
+                    savedAt: new Date().toISOString(),
+                    dirty: Array.from(dirtyIds),
+                    items: inventory.map(item => ({
+                        ...item,
+                        skt: toDocDate(item.skt),
+                        sktGecenTarih: toDocDate(item.sktGecenTarih)
+                    }))
+                }));
+            } catch (err) { /* kota dolabilir */ }
+        }
+
+        function loadLocalCache() {
+            let raw = null;
+            try { raw = localStorage.getItem(CACHE_KEY); } catch (e) { return null; }
+            if (!raw) return null;
+            try {
+                const payload = JSON.parse(raw);
+                if (!payload || !Array.isArray(payload.items) || !payload.items.length) return null;
+                inventory = payload.items.map(normalizeRemote).filter(item => item.id && item.ad);
+                if (!inventory.length) return null;
+                (payload.dirty || []).forEach(id => dirtyIds.add(String(id)));
+                sortInventory();
+                renderTable();
+                populateSelects();
+                return payload;
+            } catch (err) {
+                console.warn('Yerel önbellek okunamadı:', err);
+                return null;
+            }
+        }
+
+        // ============================================================
+        //  ŞABLON (EXCEL) YÜKLEME — BİRLEŞTİRME
+        // ============================================================
+        function parseExcelBuffer(buffer) {
+            const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+            const firstSheet = wb.SheetNames[0];
+            const ws = wb.Sheets[firstSheet];
+            if (!ws) throw new Error('Excel sayfası bulunamadı');
+            return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, blankrows: false });
+        }
+
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = () => reject(new Error('Dosya okunamadı'));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        async function importTemplateRows(rows, fileName) {
+            if (!Array.isArray(rows) || rows.length < 2) throw new Error('Şablonda veri bulunamadı');
+
+            const colMap = buildColMap(rows[0] || []);
+            if (colMap.id === -1 || colMap.ad === -1) throw new Error('MALZEME ID veya MALZEME ADI sütunu bulunamadı');
+
+            const imported = rowsToInventory(rows, colMap);
+            if (!imported.length) throw new Error('Okunabilir malzeme bulunamadı');
+
+            const changedIds = [];
+            let added = 0;
+            let updated = 0;
+            let same = 0;
+
+            imported.forEach(item => {
+                const existing = findItem(item.id);
+                if (!existing) {
+                    item.sira = inventory.length;
+                    inventory.push(item);
+                    changedIds.push(item.id);
+                    added++;
+                    return;
+                }
+
+                const before = [existing.ad, existing.kalan, existing.eksik, existing.fazla, existing.rafSkt].join('|');
+                existing.ad = item.ad || existing.ad;
+                existing.mkys = item.mkys || existing.mkys || '';
+                existing.kalan = item.kalan;
+                existing.eksik = item.eksik;
+                existing.fazla = item.fazla;
+                existing.rafSkt = item.rafSkt;
+                existing.skt = item.skt;
+                existing.sktGecenMiktar = item.sktGecenMiktar;
+                existing.sktGecenTarih = item.sktGecenTarih;
+                existing.aciklama = item.aciklama;
+                existing.ortu = item.ortu;
+                const after = [existing.ad, existing.kalan, existing.eksik, existing.fazla, existing.rafSkt].join('|');
+
+                if (before === after) same++;
+                else { updated++; changedIds.push(existing.id); }
+            });
+
+            sortInventory();
+            renderTable();
+            populateSelects();
+            saveLocalCache();
+            document.getElementById('lastUpdate').textContent = `Son güncelleme: ${new Date().toLocaleString('tr-TR')}`;
+
+            if (cloudReady && changedIds.length) {
+                try {
+                    setCloudState('loading', 'Şablon buluta aktarılıyor...');
+                    const itemsToWrite = changedIds.map(id => findItem(id)).filter(Boolean);
+                    await writeItemsToCloud(itemsToWrite);
+                    changedIds.forEach(id => dirtyIds.delete(String(id)));
+                    setCloudState('connected', `${formatNumber(inventory.length)} ürün • şablon aktarıldı`);
+                } catch (err) {
+                    changedIds.forEach(id => dirtyIds.add(String(id)));
+                    console.error('Şablon aktarımı hatası:', err);
+                    setCloudState('error', 'Şablon aktarımı başarısız: ' + err.message);
+                    showAlert(`❌ Şablon buluta aktarılamadı: ${err.message}`, 'danger');
+                }
+            } else if (!cloudReady) {
+                showAlert('💾 Yerel modda yüklendi. Firebase ayarlanınca "Tümünü Buluta Yaz" ile aktarın.', 'info');
+            }
+
+            const summary = `📥 ${fileName || 'Şablon'}: +${formatNumber(added)} yeni, ${formatNumber(updated)} güncellendi, ${formatNumber(same)} değişmedi`;
+            showAlert(summary, 'success');
+            return { added, updated, same, total: imported.length };
+        }
+
+        async function loadBundledTemplateIntoInventory() {
+            if (typeof XLSX === 'undefined') return 0;
+            for (const name of BUNDLED_TEMPLATE_FILES) {
+                try {
+                    const response = await fetch(name, { cache: 'no-store' });
+                    if (!response.ok) continue;
+                    const buffer = await response.arrayBuffer();
+                    if (!buffer || buffer.byteLength < 100) continue;
+                    const rows = parseExcelBuffer(buffer);
+                    const colMap = buildColMap(rows[0] || []);
+                    if (colMap.id === -1 || colMap.ad === -1) continue;
+                    const items = rowsToInventory(rows, colMap);
+                    if (!items.length) continue;
+                    items.forEach((item, index) => { item.sira = index; });
+                    inventory = items;
+                    renderTable();
+                    populateSelects();
+                    saveLocalCache();
+                    return items.length;
+                } catch (err) {
+                    console.warn('Şablon okunamadı:', name, err);
+                }
+            }
+            return 0;
+        }
+
+        async function seedFromBundledTemplate() {
+            let alreadySeeded = false;
+            try { alreadySeeded = localStorage.getItem(SEED_KEY) === '1'; } catch (e) { /* yoksay */ }
+
+            if (alreadySeeded) {
+                showAlert('☁️ Bulut boş. "Şablondan Yükle (Excel)" ile malzemeleri ekleyebilirsiniz.', 'info');
+                return false;
+            }
+
+            const count = await loadBundledTemplateIntoInventory();
+            if (!count) {
+                showAlert('☁️ Bulut boş. "Şablondan Yükle (Excel)" ile malzemeleri ekleyebilirsiniz.', 'info');
+                return false;
+            }
+
+            const ok = await writeAllToCloud(false);
+            if (ok) {
+                try { localStorage.setItem(SEED_KEY, '1'); } catch (e) { /* yoksay */ }
+                showAlert(`✅ İlk kurulum: ${formatNumber(count)} malzeme Firebase'e yüklendi.`, 'success');
+            }
+            return ok;
+        }
+
+        async function handleTemplateFile(file) {
+            if (typeof XLSX === 'undefined') {
+                showAlert('❌ XLSX kütüphanesi yüklenmedi.', 'danger');
+                return false;
+            }
+            try {
+                setCloudState('loading', 'Şablon okunuyor...');
+                const buffer = await readFileAsArrayBuffer(file);
+                const rows = parseExcelBuffer(buffer);
+                const result = await importTemplateRows(rows, file.name);
+                const nameEl = document.getElementById('templateFileName');
+                if (nameEl) { nameEl.textContent = `✅ ${file.name}`; nameEl.style.color = '#28a745'; }
+                return result;
+            } catch (err) {
+                console.error('Şablon yükleme hatası:', err);
+                setCloudState('error', 'Şablon hatası: ' + err.message);
+                showAlert(`❌ Şablon yüklenemedi: ${err.message}`, 'danger');
+                return false;
+            }
+        }
+
+        function exportExcelBackup() {
+            if (!inventory.length) {
+                showAlert('⚠️ Yedeklenecek kayıt yok.', 'warning');
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                showAlert('❌ XLSX kütüphanesi yüklenmedi.', 'danger');
+                return;
+            }
+            const header = ['MALZEME ID', 'MALZEME ADI', 'MKYS MALZEME KODU', 'KALAN MİKTAR', 'SKT', 'EKSİK', 'FAZLA', 'RAF SKT', 'SKT GEÇEN MİKTAR', 'SKT GEÇEN TARİH', 'AÇIKLAMA'];
+            const aoa = [header];
+            inventory.forEach(item => {
+                aoa.push([
+                    item.id,
+                    item.ad,
+                    item.mkys || '',
+                    Number(item.kalan) || 0,
+                    toCellDate(item.skt),
+                    Number(item.eksik) || 0,
+                    Number(item.fazla) || 0,
+                    item.rafSkt || '',
+                    Number(item.sktGecenMiktar) || 0,
+                    toCellDate(item.sktGecenTarih),
+                    item.aciklama || ''
+                ]);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [
+                { wch: 12 }, { wch: 55 }, { wch: 22 }, { wch: 13 }, { wch: 22 }, { wch: 10 },
+                { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 26 }
+            ];
+            [4, 9].forEach(colIndex => {
+                for (let r = 1; r < aoa.length; r++) {
+                    const cell = ws[XLSX.utils.encode_cell({ r, c: colIndex })];
+                    if (cell && cell.t === 'd') cell.z = 'dd/mm/yyyy';
+                }
+            });
+            XLSX.utils.book_append_sheet(wb, ws, 'Stok');
+
+            const now = new Date();
+            const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            XLSX.writeFile(wb, `StokYedek_${stamp}.xlsx`);
+            showAlert('✅ Excel yedeği indirildi.', 'success');
+        }
+
+        // ============================================================
+        //  VERİ KAYNAĞI OLAYLARI
+        // ============================================================
+        const templateUploadArea = document.getElementById('templateUploadArea');
+        const templateFileInput = document.getElementById('templateFileInput');
+
+        templateUploadArea.addEventListener('click', () => templateFileInput.click());
+        templateUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            templateUploadArea.classList.add('dragover');
+        });
+        templateUploadArea.addEventListener('dragleave', () => templateUploadArea.classList.remove('dragover'));
+        templateUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            templateUploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) handleTemplateFile(e.dataTransfer.files[0]);
+        });
+        templateFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleTemplateFile(e.target.files[0]);
+            e.target.value = '';
+        });
+
+        document.getElementById('templateImportBtn').addEventListener('click', () => templateFileInput.click());
+        document.getElementById('cloudReloadBtn').addEventListener('click', reloadFromCloud);
+        document.getElementById('cloudUploadAllBtn').addEventListener('click', () => writeAllToCloud(true));
+        document.getElementById('excelBackupBtn').addEventListener('click', exportExcelBackup);
+
+        // ============================================================
+        //  TABLO OLAYLARI — SIRALAMA, SÜTUN FİLTRESİ, SATIR İÇİ DÜZENLEME
+        // ============================================================
+        document.querySelector('#stokTable thead').addEventListener('click', (e) => {
+            const th = e.target.closest('th.sortable');
+            if (!th) return;
+            const key = th.dataset.sort;
+            if (!key) return;
+            if (sortKey === key) {
+                if (sortDir === 1) sortDir = -1;
+                else { sortKey = null; sortDir = 1; }
+            } else {
+                sortKey = key;
+                sortDir = 1;
+            }
+            renderTable();
+        });
+
+        document.getElementById('filterRow').addEventListener('input', (e) => {
+            const el = e.target.closest('.col-filter');
+            if (!el) return;
+            const key = el.dataset.col;
+            if (!key || !(key in colFilters)) return;
+            colFilters[key] = el.value.trim();
+            renderTable();
+        });
+
+        document.getElementById('filterRow').addEventListener('change', (e) => {
+            const el = e.target.closest('.col-filter');
+            if (!el) return;
+            const key = el.dataset.col;
+            if (!key || !(key in colFilters)) return;
+            colFilters[key] = el.value.trim();
+            renderTable();
+        });
+
+        document.getElementById('clearColFilters').addEventListener('click', clearColumnFilters);
+
+        document.getElementById('tableBody').addEventListener('change', (e) => {
+            const input = e.target.closest('.cell-input');
+            if (input) handleCellEdit(input);
+        });
+
+        document.getElementById('tableBody').addEventListener('keydown', (e) => {
+            const input = e.target.closest('.cell-input');
+            if (!input) return;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                const item = findItem(input.dataset.id);
+                if (item) {
+                    const field = input.dataset.field;
+                    if (field === 'ad' || field === 'mkys' || field === 'aciklama') {
+                        input.value = item[field] || '';
+                    } else if (field === 'rafSkt') {
+                        input.value = item.rafSkt || '';
+                    } else if (field === 'skt' || field === 'sktGecenTarih') {
+                        input.value = formatDateDisplay(item[field]);
+                    } else {
+                        input.value = Number(item[field]) || 0;
+                    }
+                }
+                input.blur();
+            }
+        });
+
+        document.getElementById('tableBody').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-act]');
+            if (!btn) return;
+            const id = btn.dataset.id;
+            if (btn.dataset.act === 'use') {
+                window.kullanFazla(id, 1);
+            } else if (btn.dataset.act === 'del') {
+                deleteItem(id);
+            }
+        });
+
+        document.getElementById('addItemSaveBtn').addEventListener('click', saveNewItem);
+        document.getElementById('addItemModal').addEventListener('click', function(e) {
+            if (e.target === this) closeAddItemModal();
+        });
+        ['newItemId', 'newItemAd', 'newItemMkys', 'newItemRafSkt', 'newItemSkt', 'newItemSktGecenTarih', 'newItemAciklama'].forEach(id => {
+            document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); saveNewItem(); }
+            });
+        });
+
+        document.getElementById('multiUseModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMultiUseModal();
+        });
+
+        document.getElementById('multiFazlaKullanModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMultiFazlaKullanModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeMultiUseModal();
+                closeMultiFazlaKullanModal();
+            }
+        });
+
+        window.addEventListener('online', () => {
+            if (cloudReady) {
+                showAlert('🌐 Bağlantı geri geldi, bulut senkronize ediliyor.', 'info');
+                if (dirtyIds.size) flushDirtyToCloud();
+            }
+        });
+
+        window.addEventListener('beforeunload', (e) => {
+            if (cloudReady && dirtyIds.size > 0) {
+                flushDirtyToCloud();
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // ============================================================
+        //  BAŞLANGIÇ
+        // ============================================================
+        (async function init() {
+            initDropdowns();
+
+            const configured = initFirebase();
+            const cached = loadLocalCache();
+
+            if (configured) {
+                setCloudState('loading', cached ? 'Önbellek gösteriliyor, bulut bağlanıyor...' : 'Bulut verileri yükleniyor...');
+                startCloudSync();
+                if (dirtyIds.size) setTimeout(() => flushDirtyToCloud(), 1500);
+                setTimeout(() => {
+                    if (!cloudSnapshotSeen) {
+                        setCloudState('error', 'Buluta ulaşılamadı — firebase-config.js ve Firestore kurallarını kontrol edin');
+                    }
+                }, 10000);
+            } else {
+                setCloudState('local', 'Yerel mod — veriler bu tarayıcıda saklanır');
+                if (!cached) {
+                    const count = await loadBundledTemplateIntoInventory();
+                    if (count) {
+                        showAlert(`📄 ${formatNumber(count)} malzeme şablondan yüklendi (yerel mod). Firebase ayarlanınca "Tümünü Buluta Yaz" ile aktarın.`, 'info');
+                    }
+                }
+            }
+        })();
+    </script>
+</body>
+</html>
