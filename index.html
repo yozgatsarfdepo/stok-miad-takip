@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="pdf-font.js"></script>
     <style>
@@ -457,13 +458,37 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- GİRİŞ EKRANI -->
+    <div id="loginScreen" style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f0f2f5;">
+      <div style="background:white; padding:30px 40px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,0.1); width:100%; max-width:400px;">
+        <h1 style="text-align:center; margin-bottom:20px; color:#2c3e50;">🔐 Stok Yönetimi Girişi</h1>
+        <p style="text-align:center; color:#7f8c8d; margin-bottom:20px; font-size:13px;">Devam etmek için giriş yapın.</p>
+        <form id="loginForm">
+          <div style="margin-bottom:15px;">
+            <label style="display:block; font-weight:600; font-size:12px; margin-bottom:5px;">E-posta</label>
+            <input type="email" id="loginEmail" placeholder="ornek@email.com" required style="width:100%; padding:10px; border:1px solid #ced4da; border-radius:4px; font-size:14px;">
+          </div>
+          <div style="margin-bottom:20px;">
+            <label style="display:block; font-weight:600; font-size:12px; margin-bottom:5px;">Şifre</label>
+            <input type="password" id="loginPassword" placeholder="••••••••" required style="width:100%; padding:10px; border:1px solid #ced4da; border-radius:4px; font-size:14px;">
+          </div>
+          <button type="submit" id="loginBtn" style="width:100%; padding:12px; background:#28a745; color:white; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Giriş Yap</button>
+          <div id="loginError" style="color:#dc3545; font-size:12px; margin-top:10px; text-align:center;"></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- UYGULAMA (Başlangıçta gizli) -->
+    <div class="container" id="appContainer" style="display:none;">
         <div class="flex-between">
             <div>
                 <h1>📦 Stok Yönetimi</h1>
                 <p class="subtitle">Firebase (Firestore) ile ortak çalışma</p>
             </div>
-            <span class="auto-save-badge" id="syncStatus">☁️ Firebase</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <span class="auto-save-badge" id="syncStatus">☁️ Firebase</span>
+                <button onclick="firebase.auth().signOut()" style="background:#dc3545; color:white; border:none; padding:4px 12px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600;">🚪 Çıkış Yap</button>
+            </div>
         </div>
 
         <div id="globalAlerts"></div>
@@ -846,9 +871,49 @@
 
     <script>
         // ============================================================
+        //  FIREBASE AUTH — KULLANICI GİRİŞİ
+        // ============================================================
+        const auth = firebase.auth();
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim();
+            const pass = document.getElementById('loginPassword').value;
+            const btn = document.getElementById('loginBtn');
+            const errDiv = document.getElementById('loginError');
+
+            btn.disabled = true;
+            btn.textContent = 'Giriş yapılıyor...';
+            errDiv.textContent = '';
+
+            try {
+                await auth.signInWithEmailAndPassword(email, pass);
+            } catch (err) {
+                let msg = 'Giriş başarısız.';
+                if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') msg = 'E-posta veya şifre hatalı.';
+                else if (err.code === 'auth/invalid-email') msg = 'Geçersiz e-posta adresi.';
+                else if (err.code === 'auth/too-many-requests') msg = 'Çok fazla deneme. Lütfen bekleyin.';
+                errDiv.textContent = msg;
+                btn.disabled = false;
+                btn.textContent = 'Giriş Yap';
+            }
+        });
+
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('appContainer').style.display = 'block';
+                // Uygulama başlatma işlemini burada tetikle
+                if (typeof appBaslat === 'function') appBaslat();
+            } else {
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('appContainer').style.display = 'none';
+            }
+        });
+
+        // ============================================================
         //  UYGULAMA DURUMU
         // ============================================================
-
         let inventory = [];
         let currentFilter = 'all';
 
@@ -1050,7 +1115,6 @@
             }
             const text = String(value == null ? '' : value).trim();
             if (!text) return null;
-            // Saat içeren ISO değerleri yerel saate göre çöz (Excel'den gelen gün kaymasını önler)
             if (/^\d{4}-\d{1,2}-\d{1,2}T/.test(text)) {
                 const parsed = new Date(text);
                 if (!isNaN(parsed.getTime())) {
@@ -1071,7 +1135,6 @@
             return null;
         }
 
-        // Firestore'da sabit biçim: YYYY-MM-DD. Çözülemeyen metin olduğu gibi kalır.
         function toIsoDate(value) {
             const p = parseDateParts(value);
             if (!p) return String(value == null ? '' : value).trim();
@@ -1395,7 +1458,6 @@
             scheduleSelectRefresh();
 
             if (hasColumnFilter() || sortKey === field) {
-                // Aktif filtre/sıralama düzenlenen alana bağlıysa listeyi tazele
                 renderTable();
             }
         }
@@ -1896,7 +1958,6 @@
                 });
             }
 
-            // SADECE FİLTRELEME - HİÇBİR VURGU YOK
             filter() {
                 const search = this.searchInput.value.toLowerCase().trim();
                 const items = this.list.querySelectorAll('.dropdown-item');
@@ -3496,9 +3557,9 @@
         });
 
         // ============================================================
-        //  BAŞLANGIÇ
+        //  BAŞLANGIÇ (Auth sonrası çağrılır)
         // ============================================================
-        (async function init() {
+        window.appBaslat = async function() {
             initDropdowns();
 
             const configured = initFirebase();
@@ -3522,7 +3583,7 @@
                     }
                 }
             }
-        })();
+        };
     </script>
 </body>
 </html>
