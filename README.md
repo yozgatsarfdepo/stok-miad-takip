@@ -6,7 +6,9 @@ Tarayıcıda çalışan stok/miad takip uygulaması. Veriler **Firebase Firestor
 
 - ☁️ **Firestore veritabanı:** Malzemeler `stok` koleksiyonunda, doküman kimliği = `MALZEME ID`. Değişiklikler otomatik kaydedilir, diğer kullanıcılara anında yansır.
 - ✏️ **Satır içi düzenleme (elle değiştirme):** Excel'deki tüm alanlar — **Malzeme Adı, MKYS Kodu, Kalan, Eksik, Fazla, RAF SKT, SKT, SKT Geçen Miktar, SKT Geçen Tarih, Açıklama** — doğrudan tablo hücresinden değiştirilir. `Enter` kaydeder, `Esc` geri alır. `3/2030` → `03/2030` (RAF SKT), `9/1/2028` → `09/01/2028` (tarihler) olarak düzeltilir.
-- 🔎 **Her sütunda filtre:** Başlığın altındaki filtre satırında ID/Ad/MKYS/Açıklama için metin arama, Kalan/Eksik/Fazla/SKT Geçen Miktar için `> 0` / `= 0`, RAF SKT ve SKT için `Dolu` / `Boş` / `Geçmiş`, SKT Geçen Tarih için `Dolu` / `Boş`, Durum için `Eksik` / `Fazla` / `Normal`. `✕` tüm sütun filtrelerini temizler.
+- 🔎 **Her sütunda filtre:** Başlığın altındaki filtre satırında ID/Ad/MKYS/Açıklama için metin arama, Kalan/Eksik/Fazla/SKT Geçen Miktar için `> 0` / `= 0`, RAF SKT ve SKT için `Dolu` / `Boş` / `Geçmiş`, SKT Geçen Tarih için `Dolu` / `Boş`, **Açıklama Tarihi** için `Dolu` / `Boş` / `Bugün` / `Son 7 gün` / `Son 30 gün`, Durum için `Eksik` / `Fazla` / `Normal`. `✕` tüm sütun filtrelerini temizler.
+- 🕒 **Açıklama tarihi:** Bir malzemeye açıklama girildiğinde/güncellendiğinde zamanı kaydedilir; **Açıklama Tarihi** sütununda `GG.AA.YYYY SS:dd` olarak görünür (açıklama hücresinin ipucunda da yazar).
+- 🕘 **Değişiklik geçmişi:** Yapılan değişiklikler (ekleme, silme, alan güncellemeleri, miktar işlemleri) tarih/saat ve kullanıcı bilgisiyle kaydedilir. **🕘 Değişiklik Geçmişi** düğmesinden **Bugün**, **Son 7 Gün**, **Son 30 Gün**, **Tümü** veya **belirli bir tarih** seçilerek görüntülenir; malzeme/ID/alan araması yapılabilir ve Excel'e aktarılabilir.
 - ↕️ **Sıralama:** Sütun başlığına tıklayınca artan/azalan sıralar, üçüncü tıklama sıralamayı kaldırır.
 - ➕ **Yeni malzeme / 🗑️ silme:** Elle kayıt ekleme ve satır silme (buluttan da siler).
 - 🧮 **Toplam satırı:** Görünen satırların Kalan/Eksik/Fazla toplamları tablo altında.
@@ -33,6 +35,7 @@ window.FIREBASE_CONFIG = {
     appId: "1:1234567890:web:abcdef"
 };
 window.FIREBASE_COLLECTION = "stok";
+window.FIREBASE_HISTORY_COLLECTION = "stok_gecmis";
 ```
 
 5. Firestore kurallarını yayınlayın (dosya: [firestore.rules](./firestore.rules)):
@@ -44,6 +47,8 @@ firebase deploy --only firestore:rules
 ```
 
 > ⚠️ `firestore.rules` içindeki kural, siteyi bilen herkesin veriyi okuyup yazmasına izin verir. Siteyi herkese açık yayınlıyorsanız **Authentication** ekleyip kuralı kullanıcı doğrulamasına bağlayın.
+
+> 🕘 **Değişiklik geçmişi için:** Uygulama, değişiklik kayıtlarını `stok_gecmis` koleksiyonuna yazar. Güncel [firestore.rules](./firestore.rules) dosyası bu koleksiyonu da kapsar; kuralı yayınlamazsanız geçmiş yalnızca tarayıcıda (localStorage) tutulur ve panelde uyarı görünür.
 
 ## 2) Yayınlama
 
@@ -71,6 +76,7 @@ firebase deploy --only hosting
 | ☁️ Tümünü Buluta Yaz | Ekrandaki listeyi olduğu gibi Firestore'a yazar |
 | 📤 Excel'e Yedekle | Güncel listeyi `.xlsx` olarak indirir |
 | ➕ Yeni Malzeme | Elle tek kayıt ekler (ID + ad zorunlu) |
+| 🕘 Değişiklik Geçmişi | Günlük/haftalık/belirli tarihteki değişiklikleri gösterir |
 | 🗑 (satırda) | Malzemeyi hem listeden hem Firestore'dan siler |
 
 ### Tabloyu elle düzenleme
@@ -83,7 +89,7 @@ firebase deploy --only hosting
 | Filtre satırı | Her sütun için ayrı filtre; `✕` hepsini temizler |
 | Tablo altı | Görünen satırların Kalan/Eksik/Fazla/SKT Geçen Miktar toplamı |
 
-Tablo 14 sütun içerir ve dar ekranlarda **yatay kaydırılır**; başlık + filtre satırı sabit kalır.
+Tablo 15 sütun içerir ve dar ekranlarda **yatay kaydırılır**; başlık + filtre satırı sabit kalır.
 
 ### Tarih alanları
 

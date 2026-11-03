@@ -8,6 +8,10 @@ service cloud.firestore {
     match /stok/{malzemeId} {
       allow read, write: if true;
     }
+    // Degisiklik gecmisi (aciklama ve alan degisiklik kayitlari)
+    match /stok_gecmis/{kayitId} {
+      allow read, write: if true;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

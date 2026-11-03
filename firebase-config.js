@@ -16,3 +16,6 @@ window.FIREBASE_CONFIG = {
 
 // Firestore koleksiyon adi (dokuman kimligi = MALZEME ID)
 window.FIREBASE_COLLECTION = "stok";
+
+// Degisiklik gecmisi koleksiyonu (aciklama ve diger alan degisiklikleri buraya yazilir)
+window.FIREBASE_HISTORY_COLLECTION = "stok_gecmis";
