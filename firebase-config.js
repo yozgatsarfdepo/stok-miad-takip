@@ -19,3 +19,6 @@ window.FIREBASE_COLLECTION = "stok";
 
 // Degisiklik gecmisi koleksiyonu (aciklama ve diger alan degisiklikleri buraya yazilir)
 window.FIREBASE_HISTORY_COLLECTION = "stok_gecmis";
+
+// Geri yukleme noktalari (yedek) koleksiyonu
+window.FIREBASE_BACKUP_COLLECTION = "stok_yedek";

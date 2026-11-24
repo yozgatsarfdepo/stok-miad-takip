@@ -538,6 +538,7 @@
                 <button id="templateImportBtn" class="btn btn-primary">📥 Şablondan Yükle (Excel)</button>
                 <button id="cloudUploadAllBtn" class="btn btn-success">☁️ Tümünü Buluta Yaz</button>
                 <button id="excelBackupBtn" class="btn btn-secondary">📤 Excel'e Yedekle</button>
+                <button id="backupListBtn" class="btn btn-warning">💾 Geri Yükleme Noktaları</button>
             </div>
 
             <div class="file-upload-area" id="templateUploadArea">
@@ -549,8 +550,12 @@
             </div>
 
             <div class="source-hint">
-                💡 <strong>Şablondan yükleme:</strong> aynı ID'li malzemelerin miktarları güncellenir, listede olmayan yeni malzemeler eklenir; buluttaki diğer kayıtlar korunur.
+                💡 <strong>Şablondan yükleme:</strong> yalnızca listede <strong>olmayan</strong> malzemeler eklenir. Aynı ID'li mevcut kayıtlar (miktarlar, açıklamalar, tarihler) <strong>değiştirilmez</strong>. Yükleme öncesinde otomatik geri yükleme noktası oluşturulur.
             </div>
+            <label class="source-hint" style="display:flex; gap:6px; align-items:center; cursor:pointer;">
+                <input type="checkbox" id="templateUpdateExisting" style="margin:0; width:auto;">
+                <span>Mevcut kayıtları da şablonla güncelle (üzerine yazar) — varsayılan olarak kapalı</span>
+            </label>
             <div class="source-hint" id="firebaseHint">
                 🔧 Firebase ayarı: <code>firebase-config.js</code> dosyasındaki <code>projectId</code> ve <code>apiKey</code> alanlarını doldurun.
             </div>
@@ -847,6 +852,46 @@
             <div class="source-hint">
                 💡 Açıklamanın eklendiği/güncellendiği zaman tablodaki <strong>Açıklama Tarihi</strong> sütununda da görünür.
                 Geçmiş kayıtları Firestore'daki <code>stok_gecmis</code> koleksiyonunda tutulur; kuralların yayınlanmış olması gerekir.
+            </div>
+        </div>
+    </div>
+
+    <!-- GERİ YÜKLEME NOKTALARI MODALI -->
+    <div class="modal-overlay" id="backupModal">
+        <div class="modal" style="max-width:1000px;">
+            <div class="modal-header">
+                <h2>💾 Geri Yükleme Noktaları</h2>
+                <button class="modal-close" onclick="closeBackupModal()">✕</button>
+            </div>
+
+            <div class="history-toolbar">
+                <button class="btn btn-success" onclick="createManualRestorePoint()">➕ Şimdi Geri Yükleme Noktası Oluştur</button>
+                <button class="btn btn-info" onclick="refreshBackupsFromCloud()">🔄 Buluttan Yenile</button>
+            </div>
+
+            <div id="backupSummary" class="text-muted" style="margin-bottom:6px;">Geri yükleme noktaları hazırlanıyor...</div>
+            <div id="backupWarning" class="alert alert-warning d-none"></div>
+
+            <div class="history-table-wrapper">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th style="width:150px;">Tarih / Saat</th>
+                            <th style="width:80px;">Kayıt</th>
+                            <th style="width:300px;">Kaynak</th>
+                            <th style="width:170px;">Kullanıcı</th>
+                            <th style="width:220px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupBody">
+                        <tr><td colspan="5" class="history-empty">Yükleniyor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="source-hint">
+                💡 Şablondan yükleme öncesinde mevcut liste otomatik olarak yedeklenir. Geri yükleme yaparken de mevcut durum ayrıca yedeklenir (geri alma geri alınabilir).
+                Yedekler Firestore'daki <code>stok_yedek</code> koleksiyonunda ve bu tarayıcıda tutulur.
             </div>
         </div>
     </div>
@@ -3286,6 +3331,7 @@
         }
 
         async function applyRemoteSnapshot(snapshot) {
+            if (cloudSyncPaused) return;
             const remoteItems = [];
             snapshot.forEach(docSnap => {
                 const data = docSnap.data();
@@ -3798,6 +3844,387 @@
         };
 
         // ============================================================
+        //  GERİ YÜKLEME NOKTALARI (YEDEK / GERİ ALMA)
+        // ============================================================
+        const BACKUP_COLLECTION = window.FIREBASE_BACKUP_COLLECTION || 'stok_yedek';
+        const BACKUP_CACHE_KEY = 'stokYedekV1';
+        const BACKUP_CHUNK_SIZE = 150;
+        const BACKUP_LOCAL_MAX = 5;
+        const BACKUP_CLOUD_MAX = 20;
+
+        let backupCache = [];
+        let backupsLoadedFromCloud = false;
+        let backupsCloudBroken = false;
+        let restoreInProgress = false;
+        let cloudSyncPaused = false;
+
+        function saveBackupCache() {
+            try {
+                const localOnes = backupCache
+                    .filter(b => b && b.id && Array.isArray(b.items) && b.items.length)
+                    .slice(0, BACKUP_LOCAL_MAX);
+                localStorage.setItem(BACKUP_CACHE_KEY, JSON.stringify(localOnes));
+            } catch (err) { /* kota dolabilir */ }
+        }
+
+        function loadBackupCache() {
+            let raw = null;
+            try { raw = localStorage.getItem(BACKUP_CACHE_KEY); } catch (e) { return; }
+            if (!raw) return;
+            try {
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) backupCache = arr.filter(b => b && b.id && Array.isArray(b.items));
+            } catch (err) {
+                console.warn('Yedek önbelleği okunamadı:', err);
+            }
+        }
+
+        function snapshotInventory() {
+            return inventory.map(item => ({
+                ...item,
+                skt: toDocDate(item.skt),
+                sktGecenTarih: toDocDate(item.sktGecenTarih)
+            }));
+        }
+
+        async function createRestorePoint(kaynak, tip = 'manuel') {
+            const items = snapshotInventory();
+            if (!items.length) return null;
+
+            const meta = {
+                id: `yedek_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                tarih: new Date().toISOString(),
+                kullanici: currentUserLabel(),
+                kaynak: kaynak || '',
+                tip,
+                kayitSayisi: items.length
+            };
+
+            backupCache.unshift({ ...meta, items });
+            backupCache = backupCache.slice(0, Math.max(BACKUP_LOCAL_MAX, BACKUP_CLOUD_MAX));
+            saveBackupCache();
+
+            if (cloudReady && db) {
+                try {
+                    const chunks = [];
+                    for (let i = 0; i < items.length; i += BACKUP_CHUNK_SIZE) {
+                        chunks.push(items.slice(i, i + BACKUP_CHUNK_SIZE));
+                    }
+                    await db.collection(BACKUP_COLLECTION).doc(meta.id).set({ ...meta, parcaSayisi: chunks.length });
+                    for (let i = 0; i < chunks.length; i++) {
+                        await db.collection(BACKUP_COLLECTION).doc(meta.id)
+                            .collection('parcalar').doc(String(i)).set({ items: chunks[i] });
+                    }
+                    backupsLoadedFromCloud = false;
+                    await pruneCloudBackups();
+                } catch (err) {
+                    console.warn('Geri yükleme noktası buluta yazılamadı:', err);
+                    if (err && err.code === 'permission-denied') {
+                        backupsCloudBroken = true;
+                        showAlert('⚠️ Geri yükleme noktası buluta yazılamadı: firestore.rules içindeki stok_yedek kuralını yayınlayın. Yedek bu tarayıcıda tutuldu.', 'warning');
+                    } else {
+                        showAlert('⚠️ Geri yükleme noktası buluta yazılamadı, bu tarayıcıda tutuldu.', 'warning');
+                    }
+                }
+            }
+
+            if (!cloudReady) {
+                showAlert('💾 Geri yükleme noktası bu tarayıcıda oluşturuldu (bulut bağlı değil).', 'info');
+            }
+            return meta;
+        }
+
+        async function pruneCloudBackups() {
+            try {
+                const snap = await db.collection(BACKUP_COLLECTION).orderBy('tarih', 'desc').get();
+                const extra = [];
+                snap.forEach((docSnap, index) => {
+                    if (index >= BACKUP_CLOUD_MAX) extra.push(docSnap.ref);
+                });
+                for (const ref of extra) {
+                    const parts = await ref.collection('parcalar').get();
+                    for (const p of parts.docs) await p.ref.delete();
+                    await ref.delete();
+                }
+            } catch (err) {
+                console.warn('Eski yedekler temizlenemedi:', err);
+            }
+        }
+
+        async function loadBackupsFromCloud(force = false) {
+            if (!cloudReady || !db || backupsCloudBroken) return false;
+            if (backupsLoadedFromCloud && !force) return true;
+            try {
+                const snap = await db.collection(BACKUP_COLLECTION)
+                    .orderBy('tarih', 'desc')
+                    .limit(BACKUP_CLOUD_MAX)
+                    .get();
+                const byId = new Map(backupCache.map(b => [b.id, b]));
+                snap.forEach(docSnap => {
+                    const data = docSnap.data() || {};
+                    if (!data.id || !data.tarih) return;
+                    const localCopy = byId.get(data.id);
+                    if (localCopy && Array.isArray(localCopy.items) && localCopy.items.length) return;
+                    byId.set(data.id, {
+                        id: data.id,
+                        tarih: String(data.tarih),
+                        kullanici: data.kullanici || '',
+                        kaynak: data.kaynak || '',
+                        tip: data.tip || '',
+                        kayitSayisi: Number(data.kayitSayisi) || 0,
+                        parcaSayisi: Number(data.parcaSayisi) || 0,
+                        items: null
+                    });
+                });
+                backupCache = Array.from(byId.values())
+                    .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih)));
+                backupsLoadedFromCloud = true;
+                saveBackupCache();
+                return true;
+            } catch (err) {
+                console.warn('Geri yükleme noktaları buluttan okunamadı:', err);
+                if (err && err.code === 'permission-denied') backupsCloudBroken = true;
+                return false;
+            }
+        }
+
+        async function loadBackupItems(backup) {
+            if (backup && Array.isArray(backup.items) && backup.items.length) return backup.items;
+            if (!cloudReady || !db) throw new Error('Yedek detayı bulunamadı (bulut bağlı değil)');
+
+            const docSnap = await db.collection(BACKUP_COLLECTION).doc(backup.id).get();
+            if (!docSnap.exists) throw new Error('Yedek bulunamadı (silinmiş olabilir)');
+            const meta = docSnap.data() || {};
+            const parcaSayisi = Number(meta.parcaSayisi) || 0;
+            const items = [];
+            if (!parcaSayisi) {
+                const parts = await db.collection(BACKUP_COLLECTION).doc(backup.id).collection('parcalar').get();
+                parts.forEach(p => {
+                    const data = p.data() || {};
+                    if (Array.isArray(data.items)) items.push(...data.items);
+                });
+                return items;
+            }
+            for (let i = 0; i < parcaSayisi; i++) {
+                const part = await db.collection(BACKUP_COLLECTION).doc(backup.id)
+                    .collection('parcalar').doc(String(i)).get();
+                if (!part.exists) continue;
+                const data = part.data() || {};
+                if (Array.isArray(data.items)) items.push(...data.items);
+            }
+            return items;
+        }
+
+        async function deleteItemsFromCloud(ids) {
+            if (!cloudReady || !ids.length) return;
+            const chunkSize = 400;
+            for (let i = 0; i < ids.length; i += chunkSize) {
+                const batch = db.batch();
+                ids.slice(i, i + chunkSize).forEach(id => {
+                    batch.delete(db.collection(CLOUD_COLLECTION).doc(docIdFor(id)));
+                });
+                await batch.commit();
+            }
+        }
+
+        function setBackupWarning(message) {
+            const el = document.getElementById('backupWarning');
+            if (!el) return;
+            if (message) {
+                el.textContent = message;
+                el.classList.remove('d-none');
+            } else {
+                el.textContent = '';
+                el.classList.add('d-none');
+            }
+        }
+
+        function renderBackupList() {
+            const tbody = document.getElementById('backupBody');
+            if (!tbody) return;
+            const list = backupCache
+                .filter(b => b && b.id)
+                .sort((a, b) => String(b.tarih).localeCompare(String(a.tarih)));
+            const summary = document.getElementById('backupSummary');
+            if (summary) summary.textContent = `${formatNumber(list.length)} geri yükleme noktası`;
+
+            if (!list.length) {
+                tbody.innerHTML = `<tr><td colspan="5" class="history-empty">Henüz geri yükleme noktası yok.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(b => {
+                const yerel = Array.isArray(b.items) && b.items.length
+                    ? ' <span class="history-tag ekle">bu tarayıcıda</span>' : '';
+                return `<tr>
+                    <td>${esc(formatDateTime(b.tarih))}</td>
+                    <td>${formatNumber(Number(b.kayitSayisi) || 0)}</td>
+                    <td title="${esc(b.kaynak || '')}">${esc(b.kaynak || '—')}${yerel}</td>
+                    <td>${esc(b.kullanici || '—')}</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" onclick="restoreBackup('${esc(b.id)}')" title="Bu yedeği geri yükle">↩️ Geri Yükle</button>
+                        <button class="btn btn-secondary btn-sm" onclick="deleteBackup('${esc(b.id)}')" title="Bu yedeği sil">🗑 Sil</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        window.openBackupModal = async function() {
+            const modal = document.getElementById('backupModal');
+            if (!modal) return;
+            modal.classList.add('active');
+            renderBackupList();
+            if (cloudReady && !backupsLoadedFromCloud) {
+                setBackupWarning('⏳ Geri yükleme noktaları buluttan okunuyor...');
+                const loaded = await loadBackupsFromCloud();
+                setBackupWarning(loaded ? '' : '⚠️ Yedek listesi buluttan okunamadı. Yalnızca bu tarayıcıdaki yedekler gösteriliyor; firestore.rules içindeki stok_yedek kuralını yayınlayın.');
+                renderBackupList();
+            } else if (!cloudReady) {
+                setBackupWarning('💾 Firebase bağlantısı yok. Yedekler yalnızca bu tarayıcıda tutuluyor.');
+            }
+        };
+
+        window.closeBackupModal = function() {
+            const modal = document.getElementById('backupModal');
+            if (modal) modal.classList.remove('active');
+        };
+
+        window.refreshBackupsFromCloud = async function() {
+            if (!cloudReady) {
+                showAlert('❌ Firebase bağlantısı yok; yalnızca bu tarayıcıdaki yedekler gösteriliyor.', 'warning');
+                return;
+            }
+            backupsLoadedFromCloud = false;
+            backupsCloudBroken = false;
+            const loaded = await loadBackupsFromCloud(true);
+            setBackupWarning(loaded ? '' : '⚠️ Yedek listesi buluttan okunamadı (Firestore kurallarını kontrol edin).');
+            renderBackupList();
+            showAlert(loaded ? '✅ Geri yükleme noktaları buluttan yenilendi.' : '⚠️ Geri yükleme noktaları buluttan okunamadı.', loaded ? 'success' : 'warning');
+        };
+
+        window.createManualRestorePoint = async function() {
+            if (!inventory.length) {
+                showAlert('⚠️ Yedeklenecek kayıt yok.', 'warning');
+                return;
+            }
+            if (!confirm(`Şu anki ${formatNumber(inventory.length)} kayıt için geri yükleme noktası oluşturulsun mu?`)) return;
+            const meta = await createRestorePoint('Manuel geri yükleme noktası', 'manuel');
+            if (!meta) return;
+            renderBackupList();
+            showAlert(`✅ Geri yükleme noktası oluşturuldu (${formatNumber(meta.kayitSayisi)} kayıt).`, 'success');
+        };
+
+        window.deleteBackup = async function(id) {
+            const backup = backupCache.find(b => b.id === id);
+            if (!backup) return;
+            if (!confirm(`"${formatDateTime(backup.tarih)}" geri yükleme noktası silinsin mi?\nBu yedekten geri yükleme yapılamaz.`)) return;
+
+            backupCache = backupCache.filter(b => b.id !== id);
+            saveBackupCache();
+            renderBackupList();
+
+            if (cloudReady && db) {
+                try {
+                    const parts = await db.collection(BACKUP_COLLECTION).doc(id).collection('parcalar').get();
+                    for (const p of parts.docs) await p.ref.delete();
+                    await db.collection(BACKUP_COLLECTION).doc(id).delete();
+                    showAlert('🗑 Yedek silindi.', 'success');
+                } catch (err) {
+                    console.error('Yedek silme hatası:', err);
+                    showAlert(`⚠️ Yedek buluttan silinemedi: ${err.message}`, 'warning');
+                }
+            }
+        };
+
+        window.restoreBackup = async function(id) {
+            if (restoreInProgress) return;
+            const backup = backupCache.find(b => b.id === id);
+            if (!backup) {
+                showAlert('❌ Geri yükleme noktası bulunamadı.', 'danger');
+                return;
+            }
+
+            let rawItems = [];
+            try {
+                rawItems = await loadBackupItems(backup);
+            } catch (err) {
+                showAlert(`❌ Yedek okunamadı: ${err.message}`, 'danger');
+                return;
+            }
+
+            const restored = (rawItems || []).map(normalizeRemote).filter(item => item.id && item.ad);
+            if (!restored.length) {
+                showAlert('❌ Yedek boş görünüyor, geri yükleme yapılmadı.', 'warning');
+                return;
+            }
+
+            const mesaj = `"${backup.kaynak || 'Geri yükleme noktası'}" geri yüklenecek.\n\n`
+                + `Yedek: ${formatNumber(restored.length)} kayıt — ${formatDateTime(backup.tarih)}\n`
+                + `Şu anki liste: ${formatNumber(inventory.length)} kayıt\n\n`
+                + `Mevcut liste bu yedekle DEĞİŞTİRİLECEK (yedekte olmayan kayıtlar silinir).\n`
+                + `Mevcut durum ayrıca yedeklenecek. Devam edilsin mi?`;
+            if (!confirm(mesaj)) return;
+
+            restoreInProgress = true;
+            cloudSyncPaused = true;
+            const oncekiSayi = inventory.length;
+            try {
+                if (inventory.length) {
+                    await createRestorePoint('Geri yükleme öncesi durum', 'geri-yukleme-oncesi');
+                }
+
+                inventory = restored;
+                sortInventory();
+                dirtyIds.clear();
+                pendingDeletes.clear();
+
+                if (cloudReady) {
+                    setCloudState('loading', 'Yedek geri yükleniyor...');
+                    const snapshot = await db.collection(CLOUD_COLLECTION).get();
+                    const cloudIds = [];
+                    snapshot.forEach(docSnap => {
+                        const data = docSnap.data() || {};
+                        if (data && data.id) cloudIds.push(String(data.id));
+                    });
+                    const restoredIds = new Set(inventory.map(item => String(item.id)));
+                    const toDelete = cloudIds.filter(cid => !restoredIds.has(cid));
+
+                    await writeItemsToCloud(inventory);
+                    if (toDelete.length) {
+                        toDelete.forEach(cid => pendingDeletes.add(cid));
+                        await deleteItemsFromCloud(toDelete);
+                        toDelete.forEach(cid => pendingDeletes.delete(cid));
+                    }
+                    setCloudState('connected', `${formatNumber(inventory.length)} ürün • geri yüklendi`);
+                }
+
+                renderTable();
+                populateSelects();
+                saveLocalCache();
+                document.getElementById('lastUpdate').textContent = `Son güncelleme: ${new Date().toLocaleString('tr-TR')}`;
+
+                logChange({
+                    malzemeId: '',
+                    malzemeAd: '',
+                    tip: 'islem',
+                    alan: 'Geri Yükleme',
+                    eskiDeger: `${formatNumber(oncekiSayi)} kayıt`,
+                    yeniDeger: `${formatNumber(inventory.length)} kayıt • ${backup.kaynak || formatDateTime(backup.tarih)}`
+                });
+
+                renderBackupList();
+                showAlert(`✅ ${formatNumber(inventory.length)} kayıt geri yüklendi.`, 'success');
+            } catch (err) {
+                console.error('Geri yükleme hatası:', err);
+                setCloudState('error', 'Geri yükleme hatası: ' + err.message);
+                showAlert(`❌ Geri yükleme başarısız: ${err.message}`, 'danger');
+            } finally {
+                restoreInProgress = false;
+                cloudSyncPaused = false;
+            }
+        };
+
+        // ============================================================
         //  ŞABLON (EXCEL) YÜKLEME — BİRLEŞTİRME
         // ============================================================
         function parseExcelBuffer(buffer) {
@@ -3817,7 +4244,7 @@
             });
         }
 
-        async function importTemplateRows(rows, fileName) {
+        async function importTemplateRows(rows, fileName, options = {}) {
             if (!Array.isArray(rows) || rows.length < 2) throw new Error('Şablonda veri bulunamadı');
 
             const colMap = buildColMap(rows[0] || []);
@@ -3826,52 +4253,93 @@
             const imported = rowsToInventory(rows, colMap);
             if (!imported.length) throw new Error('Okunabilir malzeme bulunamadı');
 
+            const updateExisting = Boolean(options.updateExisting);
+            const yeniMalzemeler = [];
+            const mevcutlar = [];
+            const gorulen = new Set();
+            let duplicate = 0;
+
+            imported.forEach(item => {
+                const key = String(item.id);
+                if (gorulen.has(key)) { duplicate++; return; }
+                gorulen.add(key);
+                const existing = findItem(key);
+                if (existing) mevcutlar.push({ imported: item, existing });
+                else yeniMalzemeler.push(item);
+            });
+
+            if (mevcutlar.length > 0 || updateExisting) {
+                const satirlar = [
+                    `📥 Şablon: ${fileName || 'Excel'}`,
+                    '',
+                    `• Yeni eklenecek: ${formatNumber(yeniMalzemeler.length)}`,
+                    updateExisting
+                        ? `• Mevcut güncellenecek (üzerine yazılacak): ${formatNumber(mevcutlar.length)}`
+                        : `• Mevcut korunacak (değiştirilmeyecek): ${formatNumber(mevcutlar.length)}`
+                ];
+                if (duplicate) satirlar.push(`• Şablondaki tekrar eden satır (yok sayılacak): ${formatNumber(duplicate)}`);
+                satirlar.push('');
+                satirlar.push(updateExisting
+                    ? '⚠️ Mevcut kayıtların miktar/açıklama/tarih bilgileri şablonla DEĞİŞTİRİLECEK.'
+                    : '✅ Mevcut kayıtlarınız (miktar, açıklama, tarih) olduğu gibi kalacak.');
+                satirlar.push('', 'Devam edilsin mi? (Yükleme öncesi geri yükleme noktası oluşturulacak)');
+                if (!confirm(satirlar.join('\n'))) {
+                    showAlert('ℹ️ Şablon yüklemesi iptal edildi.', 'info');
+                    return { cancelled: true, added: 0, updated: 0, skipped: 0, total: imported.length };
+                }
+            }
+
+            const restorePoint = await createRestorePoint(`Şablon öncesi: ${fileName || 'Excel'}`, 'sablon-oncesi');
+
             const changedIds = [];
             let added = 0;
             let updated = 0;
             let same = 0;
 
-            imported.forEach(item => {
-                const existing = findItem(item.id);
-                if (!existing) {
-                    item.sira = inventory.length;
-                    item.aciklamaTarihi = item.aciklama ? new Date().toISOString() : '';
-                    inventory.push(item);
-                    changedIds.push(item.id);
-                    added++;
-                    return;
-                }
-
-                const before = [existing.ad, existing.kalan, existing.eksik, existing.fazla, existing.rafSkt, existing.aciklama].join('|');
-                const oncekiAciklama = existing.aciklama || '';
-                existing.ad = item.ad || existing.ad;
-                existing.mkys = item.mkys || existing.mkys || '';
-                existing.kalan = item.kalan;
-                existing.eksik = item.eksik;
-                existing.fazla = item.fazla;
-                existing.rafSkt = item.rafSkt;
-                existing.skt = item.skt;
-                existing.sktGecenMiktar = item.sktGecenMiktar;
-                existing.sktGecenTarih = item.sktGecenTarih;
-                existing.aciklama = item.aciklama;
-                existing.ortu = item.ortu;
-                const after = [existing.ad, existing.kalan, existing.eksik, existing.fazla, existing.rafSkt, existing.aciklama].join('|');
-
-                if ((existing.aciklama || '') !== oncekiAciklama) {
-                    existing.aciklamaTarihi = existing.aciklama ? new Date().toISOString() : '';
-                    logChange({
-                        malzemeId: existing.id,
-                        malzemeAd: existing.ad,
-                        tip: 'guncelle',
-                        alan: 'Açıklama',
-                        eskiDeger: oncekiAciklama,
-                        yeniDeger: existing.aciklama || ''
-                    });
-                }
-
-                if (before === after) same++;
-                else { updated++; changedIds.push(existing.id); }
+            yeniMalzemeler.forEach(item => {
+                item.sira = inventory.length;
+                item.aciklamaTarihi = item.aciklama ? new Date().toISOString() : '';
+                inventory.push(item);
+                changedIds.push(item.id);
+                added++;
             });
+
+            if (updateExisting) {
+                mevcutlar.forEach(({ imported: item, existing }) => {
+                    const before = [existing.ad, existing.kalan, existing.eksik, existing.fazla, existing.rafSkt, existing.aciklama].join('|');
+                    const oncekiAciklama = existing.aciklama || '';
+                    existing.ad = item.ad || existing.ad;
+                    existing.mkys = item.mkys || existing.mkys || '';
+                    existing.kalan = item.kalan;
+                    existing.eksik = item.eksik;
+                    existing.fazla = item.fazla;
+                    existing.rafSkt = item.rafSkt;
+                    existing.skt = item.skt;
+                    existing.sktGecenMiktar = item.sktGecenMiktar;
+                    existing.sktGecenTarih = item.sktGecenTarih;
+                    // Şablonda açıklama boşsa mevcut açıklama korunur
+                    if (item.aciklama) existing.aciklama = item.aciklama;
+                    existing.ortu = item.ortu;
+                    const after = [existing.ad, existing.kalan, existing.eksik, existing.fazla, existing.rafSkt, existing.aciklama].join('|');
+
+                    if ((existing.aciklama || '') !== oncekiAciklama) {
+                        existing.aciklamaTarihi = existing.aciklama ? new Date().toISOString() : '';
+                        logChange({
+                            malzemeId: existing.id,
+                            malzemeAd: existing.ad,
+                            tip: 'guncelle',
+                            alan: 'Açıklama',
+                            eskiDeger: oncekiAciklama,
+                            yeniDeger: existing.aciklama || ''
+                        });
+                    }
+
+                    if (before === after) same++;
+                    else { updated++; changedIds.push(existing.id); }
+                });
+            }
+
+            const korunan = updateExisting ? same : mevcutlar.length;
 
             sortInventory();
             renderTable();
@@ -3880,6 +4348,7 @@
             document.getElementById('lastUpdate').textContent = `Son güncelleme: ${new Date().toLocaleString('tr-TR')}`;
 
             if (cloudReady && changedIds.length) {
+                cloudSyncPaused = true;
                 try {
                     setCloudState('loading', 'Şablon buluta aktarılıyor...');
                     const itemsToWrite = changedIds.map(id => findItem(id)).filter(Boolean);
@@ -3891,14 +4360,36 @@
                     console.error('Şablon aktarımı hatası:', err);
                     setCloudState('error', 'Şablon aktarımı başarısız: ' + err.message);
                     showAlert(`❌ Şablon buluta aktarılamadı: ${err.message}`, 'danger');
+                } finally {
+                    cloudSyncPaused = false;
                 }
             } else if (!cloudReady) {
                 showAlert('💾 Yerel modda yüklendi. Firebase ayarlanınca "Tümünü Buluta Yaz" ile aktarın.', 'info');
             }
 
-            const summary = `📥 ${fileName || 'Şablon'}: +${formatNumber(added)} yeni, ${formatNumber(updated)} güncellendi, ${formatNumber(same)} değişmedi`;
-            showAlert(summary, 'success');
-            return { added, updated, same, total: imported.length };
+            if (restorePoint) {
+                showAlert(`💾 Yükleme öncesi geri yükleme noktası oluşturuldu (${formatNumber(restorePoint.kayitSayisi)} kayıt).`, 'info');
+            }
+
+            const ozet = [`+${formatNumber(added)} yeni eklendi`];
+            if (updateExisting) {
+                ozet.push(`${formatNumber(updated)} güncellendi`, `${formatNumber(same)} değişmedi`);
+            } else {
+                ozet.push(`${formatNumber(korunan)} mevcut kayıt korundu`);
+            }
+            if (duplicate) ozet.push(`${formatNumber(duplicate)} tekrar yok sayıldı`);
+
+            logChange({
+                malzemeId: '',
+                malzemeAd: '',
+                tip: 'islem',
+                alan: updateExisting ? 'Şablon (güncelleme)' : 'Şablon (yalnızca yeni)',
+                eskiDeger: `${formatNumber(inventory.length - added)} kayıt`,
+                yeniDeger: `${formatNumber(inventory.length)} kayıt • ${fileName || 'Excel'}`
+            });
+
+            showAlert(`📥 ${fileName || 'Şablon'}: ${ozet.join(', ')}`, 'success');
+            return { added, updated, skipped: korunan, same, duplicate, total: imported.length, backup: restorePoint };
         }
 
         async function loadBundledTemplateIntoInventory() {
@@ -3959,9 +4450,20 @@
                 setCloudState('loading', 'Şablon okunuyor...');
                 const buffer = await readFileAsArrayBuffer(file);
                 const rows = parseExcelBuffer(buffer);
-                const result = await importTemplateRows(rows, file.name);
+                const updateExistingEl = document.getElementById('templateUpdateExisting');
+                const result = await importTemplateRows(rows, file.name, {
+                    updateExisting: Boolean(updateExistingEl && updateExistingEl.checked)
+                });
                 const nameEl = document.getElementById('templateFileName');
-                if (nameEl) { nameEl.textContent = `✅ ${file.name}`; nameEl.style.color = '#28a745'; }
+                if (nameEl) {
+                    if (result && result.cancelled) {
+                        nameEl.textContent = `⏹ ${file.name} (iptal edildi)`;
+                        nameEl.style.color = '#6c757d';
+                    } else {
+                        nameEl.textContent = `✅ ${file.name}`;
+                        nameEl.style.color = '#28a745';
+                    }
+                }
                 return result;
             } catch (err) {
                 console.error('Şablon yükleme hatası:', err);
@@ -4044,6 +4546,7 @@
         document.getElementById('cloudReloadBtn').addEventListener('click', reloadFromCloud);
         document.getElementById('cloudUploadAllBtn').addEventListener('click', () => writeAllToCloud(true));
         document.getElementById('excelBackupBtn').addEventListener('click', exportExcelBackup);
+        document.getElementById('backupListBtn').addEventListener('click', openBackupModal);
 
         // ============================================================
         //  TABLO OLAYLARI — SIRALAMA, SÜTUN FİLTRESİ, SATIR İÇİ DÜZENLEME
@@ -4145,11 +4648,16 @@
             if (e.target === this) closeHistoryModal();
         });
 
+        document.getElementById('backupModal').addEventListener('click', function(e) {
+            if (e.target === this) closeBackupModal();
+        });
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeMultiUseModal();
                 closeMultiFazlaKullanModal();
                 closeHistoryModal();
+                closeBackupModal();
             }
         });
 
@@ -4175,6 +4683,7 @@
         window.appBaslat = async function() {
             initDropdowns();
             loadHistoryCache();
+            loadBackupCache();
 
             const configured = initFirebase();
             const cached = loadLocalCache();

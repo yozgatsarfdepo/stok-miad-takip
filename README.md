@@ -12,7 +12,8 @@ Tarayıcıda çalışan stok/miad takip uygulaması. Veriler **Firebase Firestor
 - ↕️ **Sıralama:** Sütun başlığına tıklayınca artan/azalan sıralar, üçüncü tıklama sıralamayı kaldırır.
 - ➕ **Yeni malzeme / 🗑️ silme:** Elle kayıt ekleme ve satır silme (buluttan da siler).
 - 🧮 **Toplam satırı:** Görünen satırların Kalan/Eksik/Fazla toplamları tablo altında.
-- 📥 **Şablondan yükleme (Excel):** Var olan malzemelerin miktarları güncellenir, listede olmayan yeni malzemeler eklenir; buluttaki diğer kayıtlar korunur.
+- 📥 **Şablondan yükleme (Excel):** varsayılan olarak **yalnızca listede olmayan yeni malzemeler eklenir**; aynı ID'li mevcut kayıtların miktarı, açıklaması ve tarihleri **değiştirilmez**. İstenirse "Mevcut kayıtları da şablonla güncelle" seçeneğiyle üzerine yazma modu kullanılabilir (şablonda açıklama boşsa mevcut açıklama yine korunur). Yükleme öncesi onay özeti gösterilir.
+- 💾 **Geri yükleme noktaları:** Şablondan yükleme öncesinde (ve geri yükleme yaparken) mevcut liste otomatik yedeklenir. **💾 Geri Yükleme Noktaları** panelinden geçmiş bir yedeğe dönülebilir; yedekler Firestore'daki `stok_yedek` koleksiyonunda ve tarayıcıda saklanır (son 5 yerel / 20 bulut yedeği tutulur).
 - 📤 **Excel'e yedekleme:** Tüm liste, şablon sütun düzeniyle `.xlsx` olarak indirilir.
 - 💾 **Yerel mod:** Firebase ayarları boşsa uygulama tarayıcıda çalışır (veriler `localStorage`).
 - İlk kurulumda bulut boşsa `StokSayimRapor.xlsx` şablonu otomatik yüklenir.
@@ -36,6 +37,7 @@ window.FIREBASE_CONFIG = {
 };
 window.FIREBASE_COLLECTION = "stok";
 window.FIREBASE_HISTORY_COLLECTION = "stok_gecmis";
+window.FIREBASE_BACKUP_COLLECTION = "stok_yedek";
 ```
 
 5. Firestore kurallarını yayınlayın (dosya: [firestore.rules](./firestore.rules)):
@@ -49,6 +51,8 @@ firebase deploy --only firestore:rules
 > ⚠️ `firestore.rules` içindeki kural, siteyi bilen herkesin veriyi okuyup yazmasına izin verir. Siteyi herkese açık yayınlıyorsanız **Authentication** ekleyip kuralı kullanıcı doğrulamasına bağlayın.
 
 > 🕘 **Değişiklik geçmişi için:** Uygulama, değişiklik kayıtlarını `stok_gecmis` koleksiyonuna yazar. Güncel [firestore.rules](./firestore.rules) dosyası bu koleksiyonu da kapsar; kuralı yayınlamazsanız geçmiş yalnızca tarayıcıda (localStorage) tutulur ve panelde uyarı görünür.
+
+> 💾 **Geri yükleme noktaları için:** Yedekler `stok_yedek` koleksiyonuna (alt koleksiyon `parcalar` ile parçalı) yazılır. Kural yayınlanmazsa yedekler yalnızca tarayıcıda tutulur ve panelde uyarı görünür.
 
 ## 2) Yayınlama
 
@@ -72,7 +76,8 @@ firebase deploy --only hosting
 | Buton | İşlev |
 |---|---|
 | 🔄 Buluttan Yenile | Firestore'daki güncel listeyi çeker |
-| 📥 Şablondan Yükle (Excel) | Excel/CSV şablonunu bulut listesiyle **birleştirir** |
+| 📥 Şablondan Yükle (Excel) | Şablondaki **yeni** malzemeleri ekler; mevcut kayıtları korur (isteğe bağlı güncelleme modu) |
+| 💾 Geri Yükleme Noktaları | Yedek listesi: manuel yedek oluştur, bir yedeğe geri dön, yedek sil |
 | ☁️ Tümünü Buluta Yaz | Ekrandaki listeyi olduğu gibi Firestore'a yazar |
 | 📤 Excel'e Yedekle | Güncel listeyi `.xlsx` olarak indirir |
 | ➕ Yeni Malzeme | Elle tek kayıt ekler (ID + ad zorunlu) |
@@ -90,6 +95,14 @@ firebase deploy --only hosting
 | Tablo altı | Görünen satırların Kalan/Eksik/Fazla/SKT Geçen Miktar toplamı |
 
 Tablo 15 sütun içerir ve dar ekranlarda **yatay kaydırılır**; başlık + filtre satırı sabit kalır.
+
+### Şablondan yükleme ve geri yükleme noktaları
+
+1. **📥 Şablondan Yükle (Excel)** → dosya seçilir. Onay penceresinde kaç kayıt ekleneceği ve kaç mevcut kaydın korunacağı gösterilir.
+2. Varsayılan modda şablondaki ID'ler mevcut listede varsa **hiçbir alan değiştirilmez**; yalnızca yeni ID'ler eklenir.
+3. Onaydan sonra, yükleme öncesi durum için otomatik **geri yükleme noktası** oluşturulur.
+4. **💾 Geri Yükleme Noktaları** panelinden herhangi bir yedek seçilip **↩️ Geri Yükle** ile dönülebilir. Geri yükleme öncesinde de mevcut durum ayrıca yedeklenir, yani geri alma işlemi geri alınabilir.
+5. "Mevcut kayıtları da şablonla güncelle" kutusu işaretlenirse eski davranış (üzerine yazma) kullanılır; şablonda açıklama boşsa mevcut açıklama korunur.
 
 ### Tarih alanları
 

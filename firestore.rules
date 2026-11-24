@@ -12,6 +12,13 @@ service cloud.firestore {
     match /stok_gecmis/{kayitId} {
       allow read, write: if true;
     }
+    // Geri yukleme noktalari (yedekler ve parcalari)
+    match /stok_yedek/{yedekId} {
+      allow read, write: if true;
+      match /parcalar/{parcaId} {
+        allow read, write: if true;
+      }
+    }
     match /{document=**} {
       allow read, write: if false;
     }
