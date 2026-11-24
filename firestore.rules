@@ -1,26 +1,34 @@
 rules_version = '2';
 
-// DİKKAT: Bu kural, siteyi bilen herkesin stok verisini okuyup yazabilmesine izin verir.
-// Kurum içi/kapalı kullanım için uygundur. Siteyi herkese açık yayınlıyorsanız
-// Firebase Authentication ekleyip kuralı kullanıcı doğrulamasına bağlayın.
+// Uygulama Firebase Authentication ile giris ister; bu nedenle tum koleksiyonlar
+// yalnizca oturum acmis kullanicilara aciktir.
+// Yeni bir koleksiyon eklendiginde buraya da match blogu eklenmelidir,
+// aksi halde en alttaki catch-all kural erisimi reddeder.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Stok kayitlari (dokuman kimligi = MALZEME ID)
     match /stok/{malzemeId} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
+
     // Degisiklik gecmisi (aciklama ve alan degisiklik kayitlari)
     match /stok_gecmis/{kayitId} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
-    // Geri yukleme noktalari (yedekler ve parcalari)
+
+    // Geri yukleme noktalari (yedekler ve 150'lik parcalari)
     match /stok_yedek/{yedekId} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
+
       match /parcalar/{parcaId} {
-        allow read, write: if true;
+        allow read, write: if request.auth != null;
       }
     }
+
     match /{document=**} {
       allow read, write: if false;
     }
+
   }
 }

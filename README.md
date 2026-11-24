@@ -48,11 +48,13 @@ firebase login
 firebase deploy --only firestore:rules
 ```
 
-> ⚠️ `firestore.rules` içindeki kural, siteyi bilen herkesin veriyi okuyup yazmasına izin verir. Siteyi herkese açık yayınlıyorsanız **Authentication** ekleyip kuralı kullanıcı doğrulamasına bağlayın.
+> 🔐 `firestore.rules` içindeki kural, tüm koleksiyonlara **yalnızca oturum açmış kullanıcıların** (`request.auth != null`) erişmesine izin verir. Bu nedenle Firebase Console → **Authentication** bölümünde **E-posta/Şifre** sağlayıcısı açık olmalı ve kullanıcılar tanımlı olmalıdır.
 
 > 🕘 **Değişiklik geçmişi için:** Uygulama, değişiklik kayıtlarını `stok_gecmis` koleksiyonuna yazar. Güncel [firestore.rules](./firestore.rules) dosyası bu koleksiyonu da kapsar; kuralı yayınlamazsanız geçmiş yalnızca tarayıcıda (localStorage) tutulur ve panelde uyarı görünür.
 
-> 💾 **Geri yükleme noktaları için:** Yedekler `stok_yedek` koleksiyonuna (alt koleksiyon `parcalar` ile parçalı) yazılır. Kural yayınlanmazsa yedekler yalnızca tarayıcıda tutulur ve panelde uyarı görünür.
+> 💾 **Geri yükleme noktaları için:** Yedekler `stok_yedek` koleksiyonuna (alt koleksiyon `parcalar` ile parçalı) yazılır. Kural yayınlanmazsa veya `stok_yedek` bloğu eksikse yedekler yalnızca tarayıcıda tutulur ve panelde uyarı görünür.
+
+> ➕ **Yeni koleksiyon eklerken:** `firestore.rules` içine ilgili `match` bloğunu eklemeyi unutmayın; dosyanın sonundaki `match /{document=**} { allow read, write: if false; }` kuralı, tanımlanmamış tüm yolları reddeder.
 
 ## 2) Yayınlama
 
